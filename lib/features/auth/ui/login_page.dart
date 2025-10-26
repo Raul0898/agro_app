@@ -22,10 +22,33 @@ class _LoginPageState extends State<LoginPage> {
   final _formKey = GlobalKey<FormState>();
 
   @override
+  void initState() {
+    super.initState();
+    _emailCtrl.addListener(_onFieldsChanged);
+    _passCtrl.addListener(_onFieldsChanged);
+  }
+
+  @override
   void dispose() {
     _emailCtrl.dispose();
     _passCtrl.dispose();
     super.dispose();
+  }
+
+  void _onFieldsChanged() {
+    if (!mounted) return;
+    setState(() {});
+  }
+
+  bool get _isFormValid {
+    final email = _emailCtrl.text.trim();
+    final pass = _passCtrl.text.trim();
+
+    final emailValid =
+        email.isNotEmpty && email.contains('@') && email.contains('.');
+    final passValid = pass.isNotEmpty;
+
+    return emailValid && passValid;
   }
 
   Future<void> _signIn() async {
@@ -148,6 +171,7 @@ class _LoginPageState extends State<LoginPage> {
     final keyboard = MediaQuery.of(context).viewInsets.bottom;
     const footerReserve = 90.0;
     final bottomPaddingSafeArea = MediaQuery.of(context).padding.bottom;
+    final isFormValid = _isFormValid;
 
     return Scaffold(
       resizeToAvoidBottomInset: false,
@@ -285,8 +309,11 @@ class _LoginPageState extends State<LoginPage> {
                       child: ElevatedButton(
                         onPressed: _loading || _loadingReset ? null : _signIn,
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: kOrange,
-                          foregroundColor: Colors.black,
+                          backgroundColor:
+                              isFormValid ? kOrange : kOrange.withOpacity(0.35),
+                          foregroundColor: isFormValid
+                              ? Colors.black
+                              : Colors.black.withOpacity(0.6),
                           padding: const EdgeInsets.symmetric(vertical: 14),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                         ),
