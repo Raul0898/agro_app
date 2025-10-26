@@ -1,0 +1,106 @@
+name: agro_app
+description: "A new Flutter project."
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.9.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_pdfview: ^1.3.2
+  firebase_core: ^3.6.0
+  firebase_auth: ^5.3.1
+  cloud_firestore: ^5.4.4
+  firebase_storage: ^12.3.2
+  flutter_riverpod: ^2.5.1
+  go_router: ^14.2.7
+  image_picker: ^1.1.2
+  camera: ^0.11.0+2
+  path_provider: ^2.1.4
+  file_picker: ^8.0.0
+  pdf: ^3.10.7
+  printing: ^5.13.1
+  http: ^1.2.2
+  url_launcher: ^6.3.0
+  intl: ^0.19.0
+  cupertino_icons: ^1.0.8
+  firebase_app_check: ^0.3.2+10
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+  # === Agregados ===
+  flutter_launcher_icons: ^0.14.1
+  flutter_native_splash: ^2.4.1
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - "IMG/2.jpg"
+    - "IMG/3.jpg"
+    - "IMG/Copia de Don Raul-2.png"
+    - "IMG/Copia de Don Raul-3.png"
+    - "IMG/Copia de Don Raul.png"
+    - "IMG/Norcalogogris.png"
+    - "IMG/agronomo-digital-1.jpg"
+    - "IMG/Logo1.png"
+    - "IMG/recomendaciones.png"
+    - "IMG/subsuelo.jpg"
+    - "IMG/Norca.png"
+    - "IMG/19.jpg"
+    - "IMG/7.jpg"
+    - "IMG/portada_reportes_2.jpg"
+    - "IMG/portada_reportes_1.jpg"
+
+    - "RecursosdeInformacion/registro_de_terreno/"
+    - "RecursosdeInformacion/registro_de_terreno/GPS/"
+    - "RecursosdeInformacion/registro_de_terreno/Pantalla/"
+
+    - "analisisdesuelo/"
+    - "analisisdesuelo/Analisis_Compactacion/Manual_de_Operacion_Penetrometro.pdf"
+    - "analisisdesuelo/Analisis_Nutrientes/MANUAL_de_Operacion_Como_realizar_un_muestreo.pdf"
+
+    # === Prep. de suelos ===
+    - "Produccion_e_Investigacion/Preparacion_de_Suelos/Laboreo_Superficial/"
+    - "Produccion_e_Investigacion/Preparacion_de_Suelos/Laboreo_Superficial/Desterronador/"
+    - "Produccion_e_Investigacion/Preparacion_de_Suelos/Laboreo_Superficial/Desterronador/DESTERRONADORA-TSR-2100/"
+    - "Produccion_e_Investigacion/Preparacion_de_Suelos/Laboreo_Superficial/Rastreo/"
+    - "Produccion_e_Investigacion/Preparacion_de_Suelos/Laboreo_Superficial/Rastreo/Manual/"
+
+  fonts:
+    - family: Roboto
+      fonts:
+        - asset: assets/fonts/Roboto-Regular.ttf
+        - asset: assets/fonts/Roboto-Bold.ttf
+          weight: 700
+
+# ===============================
+# ÍCONO DE LA APP (Android)
+# ===============================
+flutter_icons:
+  android: true
+  ios: false
+  image_path_android: IMG/Logo1.png
+  adaptive_icon_foreground: IMG/Logo1.png
+  adaptive_icon_background: "#FFFFFFFF"   # FONDO BLANCO
+  min_sdk_android: 21
+
+# ===============================
+# SPLASH NATIVO (Android 12+ incluido)
+# ===============================
+flutter_native_splash:
+  color: "#FFFFFF"                        # FONDO BLANCO
+  image: IMG/Copia de Don Raul.png        # tu imagen de splash centrada
+  android: true
+  ios: false
+  web: false
+  fullscreen: true                        # evita recortes con barra superior
+  android_12:
+    icon_background_color: "#FFFFFF"      # fondo blanco también en Android 12+
+    image: IMG/Copia de Don Raul.png

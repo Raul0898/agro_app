@@ -1,0 +1,1 @@
+{"flutter":{"platforms":{"android":{"default":{"projectId":"agro-app-demo","appId":"1:10436733844:android:53b67c1260c969989abd81","fileOutput":"android/app/google-services.json"}},"dart":{"lib/firebase_options.dart":{"projectId":"agro-app-demo","configurations":{"android":"1:10436733844:android:53b67c1260c969989abd81","windows":"1:10436733844:web:3fb689f917fcbb769abd81"}}}}}}
