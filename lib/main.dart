@@ -12,7 +12,7 @@ import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart' show kIsWeb;
 
 // === Nuevo ===
-import 'splash_screen.dart';
+import 'routes/app_router.dart';
 
 /// ========= PALETA CORPORATIVA =========
 class AppColors {
@@ -499,7 +499,7 @@ class AgroApp extends StatelessWidget {
       ),
     );
 
-    return MaterialApp(
+    return MaterialApp.router(
       title: 'Agro App',
       debugShowCheckedModeBanner: false,
       themeMode: ThemeMode.system,
@@ -507,7 +507,7 @@ class AgroApp extends StatelessWidget {
       darkTheme: darkTheme,
 
       // === Cambio clave: mostramos Splash animado y luego AuthGate ===
-      home: const SplashScreen(next: AuthGate()),
+      routerConfig: appRouter,
     );
   }
 }
