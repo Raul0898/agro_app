@@ -879,7 +879,13 @@ class _ArchiveResultsList extends StatelessWidget {
           );
         }
         final raw = snap.data?.docs ?? [];
-        final docs = _dedupeDocs(raw);
+        final fromDate = _fromDate();
+        final filtered = raw.where((doc) {
+          final fecha = (doc.data()['fecha'] as Timestamp?)?.toDate();
+          if (fecha == null) return true;
+          return !fecha.isBefore(fromDate);
+        }).toList();
+        final docs = _dedupeDocs(filtered);
         if (docs.isEmpty) return _ArchivePlaceholderCard(top: top, sub: sub);
 
         return Container(
