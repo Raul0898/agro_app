@@ -13,6 +13,8 @@ import 'package:image_picker/image_picker.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
+import 'package:agro_app/features/auth/data/repo_queries.dart';
+
 class ReporteActividadFormPage extends StatefulWidget {
   final String titulo;
   final String subtipo;
@@ -966,11 +968,30 @@ class _ReporteActividadFormPageState extends State<ReporteActividadFormPage> {
   Future<QueryDocumentSnapshot<Map<String, dynamic>>?>
   _pickExistingResultForOverwrite() async {
     try {
-      final q = await FirebaseFirestore.instance
-          .collection(widget.coleccionDestino)
-          .where('unidad', isEqualTo: _ubicacionCtrl.text.trim())
-          .limit(50)
-          .get();
+      final unidadId = _ubicacionCtrl.text.trim();
+      DateTime? rangeStart;
+
+      Query<Map<String, dynamic>> query;
+
+      if (widget.coleccionDestino == 'reportes_compactacion') {
+        query = RepoQueries.reportesCompactacion(
+          unidadId: unidadId,
+          seccionId: _seccion,
+          desde: rangeStart,
+        );
+      } else if (widget.coleccionDestino == 'reportes_nutrientes') {
+        query = RepoQueries.reportesNutrientes(
+          unidadId: unidadId,
+          seccionId: _seccion,
+          desde: rangeStart,
+        );
+      } else {
+        query = FirebaseFirestore.instance
+            .collection(widget.coleccionDestino)
+            .where('unidad', isEqualTo: unidadId);
+      }
+
+      final q = await query.limit(50).get();
 
       final docs = q.docs;
 
