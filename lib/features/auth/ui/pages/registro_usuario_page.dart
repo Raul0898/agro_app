@@ -1,4 +1,5 @@
 // lib/features/auth/ui/pages/registro_usuario_page.dart
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -264,8 +265,7 @@ class _RegistroUsuarioFormState extends State<_RegistroUsuarioForm> {
         });
       }
     } catch (e) {
-      // ignore: avoid_print
-      print("Error al cargar unidades desde el catálogo: $e");
+      debugPrint('Error al cargar unidades desde el catálogo: $e');
     } finally {
       if (mounted) setState(() => _isLoadingUnidades = false);
     }
@@ -385,8 +385,7 @@ class _RegistroUsuarioFormState extends State<_RegistroUsuarioForm> {
         try {
           await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
         } catch (e) {
-          // ignore: avoid_print
-          print("Error al enviar correo de configuración: $e");
+          debugPrint('Error al enviar correo de configuración: $e');
         }
 
         Navigator.of(context).pop();

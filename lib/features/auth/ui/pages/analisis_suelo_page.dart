@@ -986,14 +986,18 @@ class _ArchiveResultsList extends StatelessWidget {
                           await refDoc.delete();
 
                           // feedback
-                          // ignore: use_build_context_synchronously
-                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Eliminado (Firestore + Storage)')));
+                          if (!context.mounted) return;
+                          ScaffoldMessenger.of(context)
+                              .showSnackBar(const SnackBar(content: Text('Eliminado (Firestore + Storage)')));
                         } on FirebaseException catch (e) {
-                          // ignore: use_build_context_synchronously
-                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('No se pudo eliminar: ${e.message ?? e.code}')));
+                          if (!context.mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('No se pudo eliminar: ${e.message ?? e.code}')),
+                          );
                         } catch (e) {
-                          // ignore: use_build_context_synchronously
-                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('No se pudo eliminar: $e')));
+                          if (!context.mounted) return;
+                          ScaffoldMessenger.of(context)
+                              .showSnackBar(SnackBar(content: Text('No se pudo eliminar: $e')));
                         }
                       },
                     ),

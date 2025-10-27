@@ -1,4 +1,5 @@
 // lib/home_page.dart
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -144,8 +145,7 @@ class _HomePageState extends State<HomePage> {
         if (mounted) setState(() => _menusPermitidosPorCategoria = {});
       }
     } catch (e) {
-      // ignore: avoid_print
-      print('Error al cargar menús del cultivo: $e');
+      debugPrint('Error al cargar menús del cultivo: $e');
       if (mounted) setState(() => _menusPermitidosPorCategoria = {});
     }
   }

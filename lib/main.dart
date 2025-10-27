@@ -1,17 +1,15 @@
 // lib/main.dart
-import 'package:flutter/material.dart';
-import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'dart:io' show Platform;
 
-import 'firebase_options.dart';
+import 'package:firebase_app_check/firebase_app_check.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart' show kDebugMode, kIsWeb;
+import 'package:flutter/material.dart';
+
 import 'features/auth/ui/login_page.dart';
 import 'features/auth/ui/pages/selector_contexto_page.dart';
-import 'package:firebase_app_check/firebase_app_check.dart';
-import 'package:flutter/foundation.dart' show kDebugMode;
-import 'dart:io' show Platform;
-import 'package:flutter/foundation.dart' show kIsWeb;
-
-// === Nuevo ===
+import 'firebase_options.dart';
 import 'routes/app_router.dart';
 
 /// ========= PALETA CORPORATIVA =========
