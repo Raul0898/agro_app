@@ -811,12 +811,14 @@ class _ArchiveResultsList extends StatelessWidget {
     if (needsSeccion && (seccion == null || seccion!.isEmpty)) {
       return const Stream<QuerySnapshot<Map<String, dynamic>>>.empty();
     }
-    Query<Map<String, dynamic>> q = FirebaseFirestore.instance
-        .collection(col)
+    final fromTs = Timestamp.fromDate(_fromDate());
+    Query<Map<String, dynamic>> q = FirebaseFirestore.instance.collection(col)
+        .where('fecha', isGreaterThanOrEqualTo: fromTs)
         .where('unidad', isEqualTo: unidad);
     if (needsSeccion) {
       q = q.where('seccion', isEqualTo: seccion);
     }
+    q = q.orderBy('fecha', descending: true);
     return q.snapshots();
   }
 
