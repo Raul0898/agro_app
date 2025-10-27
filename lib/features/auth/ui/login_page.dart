@@ -1,4 +1,5 @@
 // lib/features/auth/ui/login_page.dart
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:agro_app/features/auth/ui/pages/selector_contexto_page.dart';
@@ -14,7 +15,7 @@ class _LoginPageState extends State<LoginPage> {
   static const kOrange = Color(0xFFF2AE2E);
 
   final _emailCtrl = TextEditingController();
-  final _passCtrl  = TextEditingController();
+  final _passCtrl = TextEditingController();
   bool _obscure = true;
   bool _loading = false;
   bool _loadingReset = false; // 👈 estado de “Olvidé mi contraseña”
@@ -63,8 +64,7 @@ class _LoginPageState extends State<LoginPage> {
         email: email,
         password: pass,
       );
-      // ignore: avoid_print
-      print('✅ Signed in as: ${cred.user?.email}');
+      debugPrint('✅ Signed in as: ${cred.user?.email}');
       if (!mounted) return;
 
       Navigator.of(context).pushReplacement(
@@ -79,14 +79,12 @@ class _LoginPageState extends State<LoginPage> {
       if (e.code == 'user-disabled') msg = 'Usuario deshabilitado.';
 
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
-      // ignore: avoid_print
-      print('❌ signIn error: ${e.code} - ${e.message}');
+      debugPrint('❌ signIn error: ${e.code} - ${e.message}');
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error inesperado: $e')),
       );
-      // ignore: avoid_print
-      print('❌ signIn unknown error: $e');
+      debugPrint('❌ signIn unknown error: $e');
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -148,8 +146,7 @@ class _LoginPageState extends State<LoginPage> {
         );
       }
       // Log interno para depurar
-      // ignore: avoid_print
-      print('❌ reset error: ${e.code} - ${e.message}');
+      debugPrint('❌ reset error: ${e.code} - ${e.message}');
     } catch (e) {
       if (mounted) {
         Navigator.of(context).pop(); // cierra el diálogo
@@ -159,8 +156,7 @@ class _LoginPageState extends State<LoginPage> {
           ),
         );
       }
-      // ignore: avoid_print
-      print('❌ reset unknown error: $e');
+      debugPrint('❌ reset unknown error: $e');
     } finally {
       if (mounted) setState(() => _loadingReset = false);
     }

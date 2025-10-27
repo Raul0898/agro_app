@@ -1,0 +1,2 @@
+flutter analyze
+ERROR: Flutter SDK not available in the execution environment (command not found).

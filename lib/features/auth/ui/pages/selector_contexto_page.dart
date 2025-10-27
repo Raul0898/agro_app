@@ -1,4 +1,5 @@
 // lib/features/auth/ui/pages/selector_contexto_page.dart
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -82,7 +83,7 @@ class _SelectorContextoPageState extends State<SelectorContextoPage> {
       }
 
     } catch (e) {
-      print('Error al cargar opciones de contexto: $e');
+      debugPrint('Error al cargar opciones de contexto: $e');
       if (mounted) setState(() => _loading = false);
     }
   }
