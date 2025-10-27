@@ -1,6 +1,7 @@
 // lib/features/auth/ui/pages/reporte_actividad_nutrientes.dart
 
 import 'dart:typed_data';
+import 'package:agro_app/features/auth/data/repo_queries.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show rootBundle, NetworkAssetBundle;
@@ -963,11 +964,11 @@ class _ReporteActividadNutrientesPageState extends State<ReporteActividadNutrien
   Future<QueryDocumentSnapshot<Map<String, dynamic>>?>
   _pickExistingResultForOverwrite() async {
     try {
-      final q = await FirebaseFirestore.instance
-          .collection(_coleccionDestino)
-          .where('unidad', isEqualTo: _ubicacionCtrl.text.trim())
-          .limit(50)
-          .get();
+      final q = await RepoQueries.reportesNutrientes(
+        _ubicacionCtrl.text.trim(),
+        _seccion,
+        desde: null,
+      ).limit(50).get();
 
       final docs = q.docs;
 
