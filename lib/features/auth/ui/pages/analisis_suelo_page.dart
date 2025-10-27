@@ -13,6 +13,7 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:intl/intl.dart';
 import 'package:http/http.dart' as http;
 
+import 'package:agro_app/core/firestore/repo_queries.dart';
 import 'package:agro_app/features/auth/ui/pages/analisis_compactacion_botton_page.dart';
 import 'package:agro_app/features/auth/ui/pages/reporte_actividad_form_page.dart';
 import 'package:agro_app/features/auth/ui/pages/reporte_actividad_nutrientes.dart';
@@ -811,15 +812,38 @@ class _ArchiveResultsList extends StatelessWidget {
     if (needsSeccion && (seccion == null || seccion!.isEmpty)) {
       return const Stream<QuerySnapshot<Map<String, dynamic>>>.empty();
     }
-    final fromTs = Timestamp.fromDate(_fromDate());
-    Query<Map<String, dynamic>> q = FirebaseFirestore.instance.collection(col)
-        .where('fecha', isGreaterThanOrEqualTo: fromTs)
-        .where('unidad', isEqualTo: unidad);
-    if (needsSeccion) {
-      q = q.where('seccion', isEqualTo: seccion);
+    final desde = _fromDate();
+    final selectedUnidad = unidad!;
+    final selectedSeccion = needsSeccion ? seccion : null;
+
+    switch (col) {
+      case 'resultados_analisis_compactacion':
+        return RepoQueries.resultadosAnalisisCompactacion(
+          unidad: selectedUnidad,
+          seccion: selectedSeccion,
+          desde: desde,
+        ).snapshots();
+      case 'resultados_analisis_nutrientes':
+        return RepoQueries.resultadosAnalisisNutrientes(
+          unidad: selectedUnidad,
+          seccion: selectedSeccion,
+          desde: desde,
+        ).snapshots();
+      case 'reportes_compactacion':
+        return RepoQueries.reportesCompactacion(
+          unidad: selectedUnidad,
+          seccion: selectedSeccion,
+          desde: desde,
+        ).snapshots();
+      case 'reportes_nutrientes':
+        return RepoQueries.reportesNutrientes(
+          unidad: selectedUnidad,
+          seccion: selectedSeccion,
+          desde: desde,
+        ).snapshots();
+      default:
+        return const Stream<QuerySnapshot<Map<String, dynamic>>>.empty();
     }
-    q = q.orderBy('fecha', descending: true);
-    return q.snapshots();
   }
 
   // De-dup por storagePath (o nombre+downloadUrl)
