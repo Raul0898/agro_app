@@ -13,7 +13,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
-import 'package:agro_app/features/auth/data/repo_queries.dart';
+import 'package:agro_app/core/firestore/repo_queries.dart';
 
 class ReporteActividadFormPage extends StatefulWidget {
   final String titulo;
