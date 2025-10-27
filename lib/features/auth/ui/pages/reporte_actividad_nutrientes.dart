@@ -1,4 +1,4 @@
-// lib/features/auth/ui/pages/reporte_actividad_form_page.dart
+// lib/features/auth/ui/pages/reporte_actividad_nutrientes.dart
 
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -13,25 +13,20 @@ import 'package:image_picker/image_picker.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
-class ReporteActividadFormPage extends StatefulWidget {
-  final String titulo;
-  final String subtipo;
-  final String coleccionDestino; // p.ej. reportes_compactacion
-
-  const ReporteActividadFormPage({
-    super.key,
-    required this.titulo,
-    required this.subtipo,
-    required this.coleccionDestino,
-  });
+class ReporteActividadNutrientesPage extends StatefulWidget {
+  const ReporteActividadNutrientesPage({super.key});
 
   @override
-  State<ReporteActividadFormPage> createState() =>
-      _ReporteActividadFormPageState();
+  State<ReporteActividadNutrientesPage> createState() =>
+      _ReporteActividadNutrientesPageState();
 }
 
-class _ReporteActividadFormPageState extends State<ReporteActividadFormPage> {
+class _ReporteActividadNutrientesPageState extends State<ReporteActividadNutrientesPage> {
   static const kOrange = Color(0xFFF2AE2E);
+
+  static const String _tituloPagina = 'Reporte de Actividad de Nutrientes';
+  static const String _subtipo = 'Reporte de Actividad Nutrientes';
+  static const String _coleccionDestino = 'reportes_nutrientes';
 
   // ===== contexto y autollenado =====
   String _unidad = 'Unidad';
@@ -51,7 +46,7 @@ class _ReporteActividadFormPageState extends State<ReporteActividadFormPage> {
   final _responsableCtrl = TextEditingController(); // Responsable (solo lectura)
 
   String _nombreReporte() =>
-      'Reporte de Actividad de Compactación - ${DateFormat('dd/MM/yyyy HH:mm', 'es_MX').format(_fechaHora)}';
+      'Reporte de Actividad - Análisis de Nutrientes - ${DateFormat('dd/MM/yyyy HH:mm', 'es_MX').format(_fechaHora)}';
 
   final _comentariosCtrl = TextEditingController();
   final _incidenciasTextoCtrl = TextEditingController();
@@ -145,7 +140,7 @@ class _ReporteActividadFormPageState extends State<ReporteActividadFormPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.titulo),
+        title: Text(_tituloPagina),
         backgroundColor: kOrange,
         foregroundColor: Colors.black,
       ),
@@ -401,12 +396,12 @@ class _ReporteActividadFormPageState extends State<ReporteActividadFormPage> {
 
   String _incidenciaPath(String fileName) {
     final u = _sanitizeSegment(_unidad);
-    return 'unidades_info/$u/analisis_suelo/img/incidencias_img/img_reporte_compactacion/$_year/${_month2()}/$fileName';
+    return 'unidades_info/$u/analisis_suelo/img/incidencias_img/img_reporte_nutrientes/$_year/${_month2()}/$fileName';
   }
 
   String _reportePath(String fileName) {
     final u = _sanitizeSegment(_unidad);
-    return 'unidades_info/$u/analisis_suelo/img/reporte_actividad_compactacion_img/$_year/${_month2()}/$fileName';
+    return 'unidades_info/$u/analisis_suelo/img/reporte_actividad_analisis_nutrientes_img/$_year/${_month2()}/$fileName';
   }
 
   String _pdfFileName() {
@@ -415,13 +410,15 @@ class _ReporteActividadFormPageState extends State<ReporteActividadFormPage> {
         .replaceAll(':', '-')
         .replaceAll('\n', ' ')
         .trim();
-    return name.isEmpty ? 'Reporte de Actividad de Compactacion.pdf' : '$name.pdf';
+    return name.isEmpty
+        ? 'Reporte de Actividad - Analisis de Nutrientes.pdf'
+        : '$name.pdf';
   }
 
   String _pdfPath() {
     final u = _sanitizeSegment(_unidad);
     final name = _pdfFileName();
-    return 'unidades_info/$u/analisis_suelo/reportes/reporte_actividad_compactacion/$_year/${_month2()}/$name';
+    return 'unidades_info/$u/analisis_suelo/reportes/reporte_actividad_analisis_nutrientes/$_year/${_month2()}/$name';
   }
 
   Future<(String path, String url)> _uploadBytes(Uint8List data, String path,
@@ -433,7 +430,7 @@ class _ReporteActividadFormPageState extends State<ReporteActividadFormPage> {
       customMetadata: {
         if (uid != null) 'uid': uid,
         'unidad': _unidad,
-        'tipo': widget.subtipo,
+        'tipo': _subtipo,
       },
     );
     await ref.putData(data, metadata);
@@ -834,11 +831,11 @@ class _ReporteActividadFormPageState extends State<ReporteActividadFormPage> {
           'createdBy': uid,
           'createdAt': FieldValue.serverTimestamp(),
           'seccion': _seccion,
-          'subtipo': widget.subtipo,
+          'subtipo': _subtipo,
         };
 
         await FirebaseFirestore.instance
-            .collection(widget.coleccionDestino)
+            .collection(_coleccionDestino)
             .add(doc);
 
         if (!mounted) return;
@@ -940,11 +937,11 @@ class _ReporteActividadFormPageState extends State<ReporteActividadFormPage> {
         'updatedBy': uid,
         'updatedAt': FieldValue.serverTimestamp(),
         'seccion': _seccion,
-        'subtipo': widget.subtipo,
+        'subtipo': _subtipo,
       };
 
       await FirebaseFirestore.instance
-          .collection(widget.coleccionDestino)
+          .collection(_coleccionDestino)
           .doc(docId)
           .update(update);
 
@@ -967,7 +964,7 @@ class _ReporteActividadFormPageState extends State<ReporteActividadFormPage> {
   _pickExistingResultForOverwrite() async {
     try {
       final q = await FirebaseFirestore.instance
-          .collection(widget.coleccionDestino)
+          .collection(_coleccionDestino)
           .where('unidad', isEqualTo: _ubicacionCtrl.text.trim())
           .limit(50)
           .get();

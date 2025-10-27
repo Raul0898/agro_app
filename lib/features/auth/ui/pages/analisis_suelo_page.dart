@@ -15,6 +15,7 @@ import 'package:http/http.dart' as http;
 
 import 'package:agro_app/features/auth/ui/pages/analisis_compactacion_botton_page.dart';
 import 'package:agro_app/features/auth/ui/pages/reporte_actividad_form_page.dart';
+import 'package:agro_app/features/auth/ui/pages/reporte_actividad_nutrientes.dart';
 import 'package:agro_app/features/auth/ui/pages/analisis_nutrientes_botton_page.dart';
 
 class SectionOption {
@@ -514,11 +515,7 @@ class _AnalysisSoilPageState extends State<AnalysisSoilPage> {
         _secondaryActionButton(
           icon: Icons.assignment_outlined, label: 'Reporte de Actividad',
           onPressed: () => Navigator.of(context).push(MaterialPageRoute(
-            builder: (_) => const ReporteActividadFormPage(
-              titulo: 'Reporte de Actividad de Nutrientes',
-              subtipo: 'Reporte de Actividad Nutrientes',
-              coleccionDestino: 'reportes_nutrientes',
-            ),
+            builder: (_) => const ReporteActividadNutrientesPage(),
             settings: RouteSettings(arguments: {
               'unidadSeleccionada': _unidadActual,
               'seccionSeleccionada': _seccionSeleccionada?.valueSlug ?? _seccionParaRuta(),
@@ -807,15 +804,19 @@ class _ArchiveResultsList extends StatelessWidget {
   // Stream Firestore (solo docs “visibles” por rango + unidad + sección)
   Stream<QuerySnapshot<Map<String, dynamic>>> _firestoreStream() {
     final col = _coleccionFS();
-    if (col.isEmpty || unidad == null || unidad!.isEmpty || seccion == null || seccion!.isEmpty) {
+    final needsSeccion = top == 'Análisis';
+    if (col.isEmpty || unidad == null || unidad!.isEmpty) {
       return const Stream<QuerySnapshot<Map<String, dynamic>>>.empty();
     }
-    final fromTs = Timestamp.fromDate(_fromDate());
-    Query<Map<String, dynamic>> q = FirebaseFirestore.instance.collection(col)
-        .where('fecha', isGreaterThanOrEqualTo: fromTs)
-        .where('unidad', isEqualTo: unidad)
-        .where('seccion', isEqualTo: seccion)
-        .orderBy('fecha', descending: true);
+    if (needsSeccion && (seccion == null || seccion!.isEmpty)) {
+      return const Stream<QuerySnapshot<Map<String, dynamic>>>.empty();
+    }
+    Query<Map<String, dynamic>> q = FirebaseFirestore.instance
+        .collection(col)
+        .where('unidad', isEqualTo: unidad);
+    if (needsSeccion) {
+      q = q.where('seccion', isEqualTo: seccion);
+    }
     return q.snapshots();
   }
 
@@ -876,7 +877,13 @@ class _ArchiveResultsList extends StatelessWidget {
           );
         }
         final raw = snap.data?.docs ?? [];
-        final docs = _dedupeDocs(raw);
+        final fromDate = _fromDate();
+        final filtered = raw.where((doc) {
+          final fecha = (doc.data()['fecha'] as Timestamp?)?.toDate();
+          if (fecha == null) return true;
+          return !fecha.isBefore(fromDate);
+        }).toList();
+        final docs = _dedupeDocs(filtered);
         if (docs.isEmpty) return _ArchivePlaceholderCard(top: top, sub: sub);
 
         return Container(
