@@ -818,27 +818,27 @@ class _ArchiveResultsList extends StatelessWidget {
 
     switch (col) {
       case 'resultados_analisis_compactacion':
-        return RepoQueries.resultadosAnalisisCompactacion(
-          unidad: selectedUnidad,
-          seccion: selectedSeccion,
+        return RepoQueries.resultadosCompactacion(
+          unidadId: selectedUnidad,
+          seccionId: selectedSeccion,
           desde: desde,
         ).snapshots();
       case 'resultados_analisis_nutrientes':
-        return RepoQueries.resultadosAnalisisNutrientes(
-          unidad: selectedUnidad,
-          seccion: selectedSeccion,
+        return RepoQueries.resultadosNutrientes(
+          unidadId: selectedUnidad,
+          seccionId: selectedSeccion,
           desde: desde,
         ).snapshots();
       case 'reportes_compactacion':
         return RepoQueries.reportesCompactacion(
-          unidad: selectedUnidad,
-          seccion: selectedSeccion,
+          unidadId: selectedUnidad,
+          seccionId: selectedSeccion,
           desde: desde,
         ).snapshots();
       case 'reportes_nutrientes':
         return RepoQueries.reportesNutrientes(
-          unidad: selectedUnidad,
-          seccion: selectedSeccion,
+          unidadId: selectedUnidad,
+          seccionId: selectedSeccion,
           desde: desde,
         ).snapshots();
       default:
