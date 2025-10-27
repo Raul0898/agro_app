@@ -2,10 +2,11 @@
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show rootBundle, TextInputFormatter, FilteringTextInputFormatter;
+import 'package:agro_app/features/auth/data/repo_queries.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:intl/intl.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
@@ -687,10 +688,12 @@ class _AnalisisCompactacionBottonPageState extends State<AnalisisCompactacionPag
 
     try {
       // Trae TODO lo del usuario y filtramos en memoria por unidad/sección o por storagePath
-      final snap = await FirebaseFirestore.instance
-          .collection('resultados_analisis_compactacion')
-          .where('uid', isEqualTo: user.uid)
-          .get();
+      final query = RepoQueries.resultadosCompactacion(
+        unidadId: _unidad,
+        seccionId: _seccion,
+        desde: null,
+      );
+      final snap = await query.get();
 
       final uSan = _sanitizeSegment(_unidad);
       final sSan = _sanitizeSegment(_seccion);
@@ -714,6 +717,10 @@ class _AnalisisCompactacionBottonPageState extends State<AnalisisCompactacionPag
 
       var docs = snap.docs.where((e) {
         final d = e.data();
+        final ownerUid = d['ownerUid'] as String?;
+        final legacyUid = d['uid'] as String?;
+        final belongsToUser = ownerUid == user.uid || legacyUid == user.uid;
+        if (!belongsToUser) return false;
         return coincidePorCampos(d) || coincidePorRuta(d);
       }).toList();
 
@@ -737,13 +744,6 @@ class _AnalisisCompactacionBottonPageState extends State<AnalisisCompactacionPag
         );
         return null;
       }
-
-      // Ordenar por fecha desc
-      docs.sort((a, b) {
-        final ta = (a.data()['fecha'] as Timestamp?) ?? Timestamp(0, 0);
-        final tb = (b.data()['fecha'] as Timestamp?) ?? Timestamp(0, 0);
-        return tb.compareTo(ta);
-      });
 
       return showDialog<DocumentSnapshot<Map<String, dynamic>>?>(
         context: context,

@@ -1,47 +1,35 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+/// Helper queries for repository-style access to Firestore collections related to
+/// analysis and reports.
 class RepoQueries {
-  const RepoQueries._();
+  RepoQueries._();
 
-  static Query<Map<String, dynamic>> reportesCompactacion({
+  /// Returns a query for compactación analysis results ordered by most recent
+  /// date first and filtered by unidad/sección. Accepts an optional [desde]
+  /// parameter to only include documents from that date forward and an optional
+  /// [limit] for pagination.
+  static Query<Map<String, dynamic>> resultadosCompactacion({
     required String unidadId,
     required String seccionId,
     DateTime? desde,
+    int? limit,
   }) {
-    var query = FirebaseFirestore.instance
-        .collection('reportes_compactacion')
-        .where('unidad', isEqualTo: unidadId);
-
-    if (seccionId.trim().isNotEmpty) {
-      query = query.where('seccion', isEqualTo: seccionId);
-    }
+    Query<Map<String, dynamic>> q = FirebaseFirestore.instance
+        .collection('resultados_analisis_compactacion')
+        .where('unidad', isEqualTo: unidadId)
+        .where('seccion', isEqualTo: seccionId);
 
     if (desde != null) {
-      query = query
-          .where('fechaHora', isGreaterThanOrEqualTo: Timestamp.fromDate(desde));
+      q = q.where('fecha', isGreaterThanOrEqualTo: Timestamp.fromDate(desde));
     }
 
-    return query;
-  }
+    q = q.orderBy('fecha', descending: true);
 
-  static Query<Map<String, dynamic>> reportesNutrientes({
-    required String unidadId,
-    required String seccionId,
-    DateTime? desde,
-  }) {
-    var query = FirebaseFirestore.instance
-        .collection('reportes_nutrientes')
-        .where('unidad', isEqualTo: unidadId);
-
-    if (seccionId.trim().isNotEmpty) {
-      query = query.where('seccion', isEqualTo: seccionId);
+    if (limit != null) {
+      q = q.limit(limit);
     }
 
-    if (desde != null) {
-      query = query
-          .where('fechaHora', isGreaterThanOrEqualTo: Timestamp.fromDate(desde));
-    }
-
-    return query;
+    return q;
   }
 }
