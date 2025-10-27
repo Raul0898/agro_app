@@ -253,19 +253,22 @@ class ActivitiesPage extends StatelessWidget {
       );
     }
 
-    // ✅ FIX: Añadimos SIEMPRE un ítem extra que apunta a Registro de Unidades de Siembra
-    // No afecta a currentIndex (solo se seleccionan los de 'titles')
-    items.add(
-      RailItem(
-        icon: Icons.yard_outlined,
-        tooltip: 'Registro de Unidades de Siembra',
-        onTap: () {
-          Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const reg_unidades.RegistroUnidadesSiembraPage()),
-          );
-        },
-      ),
-    );
+    // ✅ FIX: Añadimos el ítem extra solo para secciones distintas de PEI/CEI/FE.
+    // En estas secciones (Servicios Internos, etc.) sí debe mostrarse el acceso
+    // directo al Registro de Unidades de Siembra.
+    if (s != 'pei' && s != 'cei' && s != 'fe') {
+      items.add(
+        RailItem(
+          icon: Icons.yard_outlined,
+          tooltip: 'Registro de Unidades de Siembra',
+          onTap: () {
+            Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const reg_unidades.RegistroUnidadesSiembraPage()),
+            );
+          },
+        ),
+      );
+    }
 
     return MiniIconRailScaffold(
       title: title,
