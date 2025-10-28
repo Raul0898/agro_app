@@ -13,6 +13,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
+import 'package:agro_app/widgets/upload_overlay.dart';
 
 class ReporteActividadNutrientesPage extends StatefulWidget {
   const ReporteActividadNutrientesPage({super.key});
@@ -434,7 +435,13 @@ class _ReporteActividadNutrientesPageState extends State<ReporteActividadNutrien
         'tipo': _subtipo,
       },
     );
-    await ref.putData(data, metadata);
+    final uploadTask = ref.putData(data, metadata);
+    showUploadOverlayForTask(
+      context,
+      uploadTask,
+      label: 'Subiendo archivo…',
+    );
+    await uploadTask;
     final url = await ref.getDownloadURL();
     return (path, url);
   }

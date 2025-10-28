@@ -9,6 +9,7 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
+import 'package:agro_app/widgets/upload_overlay.dart';
 
 // ---------- Helpers de assets ----------
 Future<pw.ThemeData> _loadPdfTheme() async {
@@ -358,70 +359,6 @@ class _AnalisisCompactacionBottonPageState extends State<AnalisisCompactacionPag
     return doc.save();
   }
 
-  // ---------------- Diálogos de progreso ----------------
-  void _showStorageUploadDialog(UploadTask task) {
-    showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) {
-        return Center(
-          child: Material(
-            color: Colors.transparent,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0),
-              child: StreamBuilder<TaskSnapshot>(
-                stream: task.snapshotEvents,
-                builder: (context, snap) {
-                  final transferred = snap.data?.bytesTransferred ?? 0;
-                  final total = snap.data?.totalBytes ?? 1;
-                  final pct = total == 0 ? 0.0 : (transferred / total).clamp(0.0, 1.0);
-
-                  return Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      _LogoProgress(progress: pct),
-                      const SizedBox(height: 12),
-                      Text('Subiendo reporte… ${(pct * 100).toStringAsFixed(0)}%', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
-                      const SizedBox(height: 6),
-                      const Text('No cierres esta ventana', style: TextStyle(color: Colors.white70, fontSize: 12)),
-                    ],
-                  );
-                },
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  Future<void> _withBlockingSavingDialog(Future<void> Function() action, {String message = 'Guardando…'}) async {
-    showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: const [
-              SizedBox(width: 6),
-              CircularProgressIndicator(strokeWidth: 3),
-              SizedBox(width: 14),
-              Text('Guardando…'),
-            ],
-          ),
-        ),
-      ),
-    );
-    try {
-      await action();
-    } finally {
-      if (mounted) Navigator.of(context, rootNavigator: true).pop();
-    }
-  }
-
   void _showSnack(String msg, {bool error = false}) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -563,13 +500,18 @@ class _AnalisisCompactacionBottonPageState extends State<AnalisisCompactacionPag
           customMetadata: { 'uid': user.uid },
         ),
       );
-      _showStorageUploadDialog(uploadTask);
+      showUploadOverlayForTask(
+        context,
+        uploadTask,
+        label: 'Subiendo reporte…',
+      );
       final snap = await uploadTask;
-      if (mounted) Navigator.of(context, rootNavigator: true).pop();
 
       final downloadUrl = await snap.ref.getDownloadURL();
 
-      await _withBlockingSavingDialog(() async {
+      await runWithIndeterminateOverlay(
+        context,
+        () async {
         await FirebaseFirestore.instance.collection('resultados_analisis_compactacion').add({
           'uid': user.uid,
           'ownerUid': user.uid,
@@ -594,7 +536,9 @@ class _AnalisisCompactacionBottonPageState extends State<AnalisisCompactacionPag
                 (i) => {'n': _pruebas[i], 'profundidad_cm': _profundidades[i], 'psi': psiValues[i]},
           ),
         });
-      }, message: 'Guardando en la base de datos…');
+        },
+        label: 'Guardando en la base de datos…',
+      );
 
       return true;
     } catch (e) {
@@ -643,14 +587,19 @@ class _AnalisisCompactacionBottonPageState extends State<AnalisisCompactacionPag
         pdfBytes,
         SettableMetadata(contentType: 'application/pdf', customMetadata: {'uid': user.uid}),
       );
-      _showStorageUploadDialog(uploadTask);
+      showUploadOverlayForTask(
+        context,
+        uploadTask,
+        label: 'Subiendo reporte…',
+      );
       final snap = await uploadTask;
-      if (mounted) Navigator.of(context, rootNavigator: true).pop();
 
       final downloadUrl = await snap.ref.getDownloadURL();
       final finalPath = ref.fullPath;
 
-      await _withBlockingSavingDialog(() async {
+      await runWithIndeterminateOverlay(
+        context,
+        () async {
         await FirebaseFirestore.instance.collection('resultados_analisis_compactacion').doc(doc.id).update({
           'fecha': Timestamp.fromDate(now),
           'downloadUrl': downloadUrl,
@@ -672,7 +621,9 @@ class _AnalisisCompactacionBottonPageState extends State<AnalisisCompactacionPag
                 (i) => {'n': _pruebas[i], 'profundidad_cm': _profundidades[i], 'psi': psiValues[i]},
           ),
         });
-      }, message: 'Actualizando en la base de datos…');
+        },
+        label: 'Actualizando en la base de datos…',
+      );
 
       return true;
     } catch (e) {
@@ -1014,30 +965,3 @@ class _AnalisisCompactacionBottonPageState extends State<AnalisisCompactacionPag
 
 enum _SaveMode { nuevo, sobrescribir }
 enum _DupChoice { rename, overwrite, cancel }
-
-class _LogoProgress extends StatelessWidget {
-  final double progress;
-  const _LogoProgress({required this.progress});
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: 160, height: 160,
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          Image.asset('IMG/Logo1.png', fit: BoxFit.contain, errorBuilder: (_, __, ___) => const Center(child: CircularProgressIndicator(strokeWidth: 3))),
-          Positioned.fill(
-            child: ClipRect(
-              child: Align(
-                alignment: Alignment.topCenter,
-                heightFactor: progress.clamp(0.0, 1.0),
-                child: Image.asset('IMG/Logo1.png', fit: BoxFit.contain, colorBlendMode: BlendMode.srcATop),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}

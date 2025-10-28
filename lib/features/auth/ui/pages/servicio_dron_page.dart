@@ -6,6 +6,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:path/path.dart' as p;
 import 'package:url_launcher/url_launcher.dart';
+import 'package:agro_app/widgets/upload_overlay.dart';
 
 class ServicioDronPage extends StatefulWidget {
   const ServicioDronPage({super.key});
@@ -101,16 +102,22 @@ class _ServicioDronPageState extends State<ServicioDronPage> {
         final ref = FirebaseStorage.instance.ref(storagePath);
         final f = File(file.path!);
 
-        await ref.putFile(
+        final uploadTask = ref.putFile(
           f,
           SettableMetadata(
             contentType: ext == 'kml'
                 ? 'application/vnd.google-earth.kml+xml'
                 : ext == 'kmz'
-                ? 'application/vnd.google-earth.kmz'
-                : 'application/geo+json',
+                    ? 'application/vnd.google-earth.kmz'
+                    : 'application/geo+json',
           ),
         );
+        showUploadOverlayForTask(
+          context,
+          uploadTask,
+          label: 'Subiendo archivo de referencia…',
+        );
+        await uploadTask;
         await ref.getMetadata();
         downloadUrl = await ref.getDownloadURL();
       }
