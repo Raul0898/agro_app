@@ -28,11 +28,27 @@
       ]
     },
     {
+      "collectionGroup": "reportes_compactacion",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {"fieldPath": "unidad", "order": "ASCENDING"},
+        {"fieldPath": "fecha", "order": "DESCENDING"}
+      ]
+    },
+    {
       "collectionGroup": "reportes_nutrientes",
       "queryScope": "COLLECTION",
       "fields": [
         {"fieldPath": "unidad", "order": "ASCENDING"},
         {"fieldPath": "seccion", "order": "ASCENDING"},
+        {"fieldPath": "fecha", "order": "DESCENDING"}
+      ]
+    },
+    {
+      "collectionGroup": "reportes_nutrientes",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {"fieldPath": "unidad", "order": "ASCENDING"},
         {"fieldPath": "fecha", "order": "DESCENDING"}
       ]
     }
