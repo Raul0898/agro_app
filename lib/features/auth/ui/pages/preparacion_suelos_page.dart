@@ -1,16 +1,12 @@
-// lib/features/auth/ui/pages/preparacion_suelos_page.dart
-import 'dart:convert';
-import 'dart:io';
-import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:intl/intl.dart';
-import 'package:http/http.dart' as http;
-import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
-import 'package:flutter_pdfview/flutter_pdfview.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/services.dart' show rootBundle;
-import 'package:agro_app/features/auth/ui/pages/reporte_actividad_form_page.dart';
+import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
+
+import 'package:agro_app/core/firestore/laboreo_service.dart';
+import 'package:agro_app/core/router/app_routes.dart';
 
 class PreparacionSuelosPage extends StatefulWidget {
   const PreparacionSuelosPage({super.key});
@@ -19,438 +15,856 @@ class PreparacionSuelosPage extends StatefulWidget {
   State<PreparacionSuelosPage> createState() => _PreparacionSuelosPageState();
 }
 
-enum _CasoCompactacion { verde, amarillo, rojo }
-enum _DecisionAmarillo { none, realizar, no_realizar }
+enum _CasoGlobal { verde, amarillo, rojo, desconocido }
 
-class _AssetEntry {
-  final String name;
-  final bool isDir;
-  final String fullPath;
-  final bool isVirtualNone;
-  const _AssetEntry({required this.name, required this.isDir, required this.fullPath, this.isVirtualNone = false});
+class _SeccionAnalisis {
+  const _SeccionAnalisis({
+    required this.id,
+    this.nombre,
+    this.fecha,
+    this.recomendacionTexto,
+    this.recomendacionColor,
+    this.url,
+  });
+
+  final String id;
+  final String? nombre;
+  final DateTime? fecha;
+  final String? recomendacionTexto;
+  final String? recomendacionColor;
+  final String? url;
+
+  bool get tieneDocumento => nombre != null || fecha != null || recomendacionTexto != null;
 }
 
-class _AssetLevel {
-  final String prefix;
-  final String? selectedPath;
-  const _AssetLevel({required this.prefix, this.selectedPath});
-  _AssetLevel copyWith({String? prefix, String? selectedPath}) => _AssetLevel(prefix: prefix ?? this.prefix, selectedPath: selectedPath ?? this.selectedPath);
+class _DecisionProfundoState {
+  const _DecisionProfundoState({
+    required this.docId,
+    this.decision,
+    this.fuente,
+    this.ultimoReporteAt,
+    this.updatedAt,
+  });
+
+  final String docId;
+  final String? decision;
+  final String? fuente;
+  final DateTime? ultimoReporteAt;
+  final DateTime? updatedAt;
+
+  bool get reporteVigente => _isWithinSixMonths(ultimoReporteAt);
+
+  static _DecisionProfundoState fromSnapshot(
+    DocumentSnapshot<Map<String, dynamic>> snap,
+  ) {
+    final data = snap.data() ?? <String, dynamic>{};
+    return _DecisionProfundoState(
+      docId: snap.id,
+      decision: (data['decision'] as String?)?.trim(),
+      fuente: (data['fuente'] as String?)?.trim(),
+      ultimoReporteAt: (data['ultimoReporteAt'] as Timestamp?)?.toDate(),
+      updatedAt: (data['updatedAt'] as Timestamp?)?.toDate(),
+    );
+  }
+}
+
+class _ActividadSuperficialState {
+  const _ActividadSuperficialState({
+    required this.docId,
+    required this.actividades,
+    this.createdAt,
+    this.reporteEmitidoAt,
+  });
+
+  final String docId;
+  final List<String> actividades;
+  final DateTime? createdAt;
+  final DateTime? reporteEmitidoAt;
+
+  bool get reporteVigente => _isWithinSixMonths(reporteEmitidoAt);
+
+  static _ActividadSuperficialState fromSnapshot(
+    QueryDocumentSnapshot<Map<String, dynamic>> snap,
+  ) {
+    final data = snap.data();
+    final actividades = (data['actividades'] as List?)
+            ?.whereType<String>()
+            .map((e) => e.trim())
+            .where((e) => e.isNotEmpty)
+            .toList() ??
+        <String>[];
+    return _ActividadSuperficialState(
+      docId: snap.id,
+      actividades: actividades,
+      createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
+      reporteEmitidoAt: (data['reporteEmitidoAt'] as Timestamp?)?.toDate(),
+    );
+  }
 }
 
 class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
-  static const kOrange = Color(0xFFF2AE2E);
-  _DecisionAmarillo _amarilloDecision = _DecisionAmarillo.none;
-  bool _loadingDecision = true;
-  static const String kSupBase = 'Produccion e Investigacion/Preparacion de Suelos/Laboreo Superficial/';
-  static const String kRastreoPrefix = '${kSupBase}Rastreo/';
-  static const String kDestPrefix = '${kSupBase}Desterronador/';
-  bool _manifestLoaded = false;
-  String? _manifestError;
-  List<String> _assets = [];
-  final List<String> _laboreoOptions = const ['Rastreo', 'Desterronador', 'Ambos'];
-  String? _laboreoSelected;
-  late List<_AssetLevel> _levelsR;
-  late List<_AssetLevel> _levelsD;
-  String? _selectedFileRastreo;
-  String? _selectedFileDest;
-  final List<String> _repoTipos = const ['Reportes de Laboreo Profundo', 'Reportes de Laboreo Superficial'];
-  String _repoTipoSel = 'Reportes de Laboreo Profundo';
+  final LaboreoService _service = LaboreoService();
 
-  String get _repoColeccion {
-    if (_repoTipoSel == 'Reportes de Laboreo Superficial') {
-      return 'reportes_preparacion_suelos';
-    }
-    return 'reportes_preparacion_suelos';
-  }
+  bool _loading = true;
+  String? _error;
+  String? _uid;
+  String? _unidadId;
+
+  List<_SeccionAnalisis> _secciones = const [];
+  _DecisionProfundoState? _decision;
+  bool _showDecisionForm = false;
+  bool _savingDecision = false;
+
+  List<_ActividadSuperficialState> _superficiales = const [];
+  bool _addingSuperficial = false;
+  String _superficialOption = 'Rastreo';
+
+  static const List<String> _superficialOptions = <String>[
+    'Rastreo',
+    'Desterronador',
+    'Ambos',
+  ];
 
   @override
   void initState() {
     super.initState();
-    _levelsR = [const _AssetLevel(prefix: kRastreoPrefix)];
-    _levelsD = [const _AssetLevel(prefix: kDestPrefix)];
-    _loadDecision();
-    _loadAssetManifest();
+    _initialize();
   }
 
-  Future<void> _loadDecision() async {
+  Future<void> _initialize() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) {
+      setState(() {
+        _loading = false;
+        _error = 'Debes iniciar sesión para ver esta información.';
+      });
+      return;
+    }
+
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+
     try {
-      final uid = FirebaseAuth.instance.currentUser?.uid;
-      if (uid == null) {
-        setState(() => _loadingDecision = false);
+      final unidad = await _service.unidadActualDelUsuario(uid);
+      if (unidad == null || unidad.trim().isEmpty) {
+        setState(() {
+          _loading = false;
+          _error = 'No se encontró una unidad asignada al perfil.';
+        });
         return;
       }
-      final doc = await FirebaseFirestore.instance.collection('ui_state').doc('preparacion_suelos').collection('users').doc(uid).get();
-      final val = doc.data()?['amarilloSeleccion'] as String?;
+
+      final seccionesIds = await _service.seccionesDeUnidad(unidad);
+      final secciones = <_SeccionAnalisis>[];
+      for (final seccionId in seccionesIds) {
+        final snap = await _service.ultimoCompactacionPorSeccion(
+          unidadId: unidad,
+          seccionId: seccionId,
+        );
+        secciones.add(_mapSeccion(seccionId, snap));
+      }
+
+      final decisionSnap =
+          await _service.decisionProfundoDoc(uid: uid, unidadId: unidad);
+      final decision =
+          decisionSnap == null ? null : _DecisionProfundoState.fromSnapshot(decisionSnap);
+
+      final superficialesDocs =
+          await _service.actividadesSuperficiales(uid: uid, unidadId: unidad);
+      final superficiales = superficialesDocs
+          .map(_ActividadSuperficialState.fromSnapshot)
+          .toList();
+
       setState(() {
-        if (val == 'realizar') _amarilloDecision = _DecisionAmarillo.realizar;
-        else if (val == 'no_realizar') _amarilloDecision = _DecisionAmarillo.no_realizar;
-        else _amarilloDecision = _DecisionAmarillo.none;
-        _loadingDecision = false;
-      });
-    } catch (_) {
-      setState(() {
-        _amarilloDecision = _DecisionAmarillo.none;
-        _loadingDecision = false;
-      });
-    }
-  }
-
-  Future<void> _saveDecision(_DecisionAmarillo d) async {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) return;
-    String? val;
-    if (d == _DecisionAmarillo.realizar) val = 'realizar';
-    if (d == _DecisionAmarillo.no_realizar) val = 'no_realizar';
-    await FirebaseFirestore.instance.collection('ui_state').doc('preparacion_suelos').collection('users').doc(uid).set({'amarilloSeleccion': val, 'updatedAt': FieldValue.serverTimestamp()}, SetOptions(merge: true));
-  }
-
-  _CasoCompactacion _evaluarCaso(double mayor) {
-    if (mayor >= 200) return _CasoCompactacion.rojo;
-    if (mayor >= 100) return _CasoCompactacion.amarillo;
-    return _CasoCompactacion.verde;
-  }
-
-  String _textoCaso(_CasoCompactacion c) {
-    switch (c) {
-      case _CasoCompactacion.verde: return 'No Requiere Subsuelo';
-      case _CasoCompactacion.amarillo: return 'No Requiere Subsuelo (condición limitada)';
-      case _CasoCompactacion.rojo: return 'Requiere Subsuelo';
-    }
-  }
-
-  Color _colorCasoBg(_CasoCompactacion c) {
-    switch (c) {
-      case _CasoCompactacion.verde: return Colors.green.withOpacity(0.12);
-      case _CasoCompactacion.amarillo: return Colors.yellow.shade700.withOpacity(0.12);
-      case _CasoCompactacion.rojo: return Colors.red.withOpacity(0.12);
-    }
-  }
-
-  Color _colorCasoBorder(_CasoCompactacion c) {
-    switch (c) {
-      case _CasoCompactacion.verde: return Colors.green.withOpacity(0.45);
-      case _CasoCompactacion.amarillo: return Colors.yellow.shade700.withOpacity(0.5);
-      case _CasoCompactacion.rojo: return Colors.red.withOpacity(0.45);
-    }
-  }
-
-  IconData _iconCaso(_CasoCompactacion c) {
-    switch (c) {
-      case _CasoCompactacion.verde: return Icons.check_circle;
-      case _CasoCompactacion.amarillo: return Icons.warning_amber;
-      case _CasoCompactacion.rojo: return Icons.report_gmailerrorred;
-    }
-  }
-
-  Future<void> _loadAssetManifest() async {
-    try {
-      final raw = await rootBundle.loadString('AssetManifest.json');
-      final Map<String, dynamic> man = json.decode(raw);
-      final allKeys = man.keys.map((e) => e.toString()).toList();
-      _assets = allKeys.where((k) => k.startsWith(kSupBase)).toList()..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
-      setState(() {
-        _manifestLoaded = true;
-        _manifestError = null;
+        _uid = uid;
+        _unidadId = unidad;
+        _secciones = secciones;
+        _decision = decision;
+        _showDecisionForm = decision?.decision == null;
+        _superficiales = superficiales;
+        _loading = false;
       });
     } catch (e) {
       setState(() {
-        _manifestLoaded = true;
-        _manifestError = 'No se pudo cargar el índice de assets. Detalle: $e';
+        _loading = false;
+        _error = 'Error al cargar los datos: $e';
       });
     }
   }
 
-  List<_AssetEntry> _childrenOfPrefix(String prefix) {
-    final List<_AssetEntry> result = [];
-    final Set<String> dirNames = {};
-    final Set<String> fileNames = {};
-
-    for (final asset in _assets) {
-      if (!asset.startsWith(prefix)) continue;
-      final rest = asset.substring(prefix.length);
-      if (rest.isEmpty) continue;
-      final parts = rest.split('/');
-      if (parts.length == 1) {
-        final file = parts.first;
-        if (file.isNotEmpty && file != '.DS_Store') fileNames.add(file);
-      } else {
-        final dir = parts.first;
-        if (dir.isNotEmpty) dirNames.add(dir);
-      }
+  _SeccionAnalisis _mapSeccion(
+    String seccionId,
+    QueryDocumentSnapshot<Map<String, dynamic>>? snap,
+  ) {
+    if (snap == null) {
+      return _SeccionAnalisis(id: seccionId);
     }
-
-    final sortedDirs = dirNames.toList()..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
-    final sortedFiles = fileNames.toList()..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
-
-    for (final d in sortedDirs) {
-      result.add(_AssetEntry(name: d, isDir: true, fullPath: '$prefix$d/'));
-    }
-    for (final f in sortedFiles) {
-      result.add(_AssetEntry(name: f, isDir: false, fullPath: '$prefix$f'));
-    }
-
-    if (result.isEmpty) {
-      result.add(const _AssetEntry(name: 'Sin contenido', isDir: false, fullPath: '', isVirtualNone: true));
-    }
-    return result;
+    final data = snap.data();
+    final nombre = (data['nombreArchivo'] as String?) ??
+        (data['nombre'] as String?) ??
+        (data['titulo'] as String?);
+    final url = (data['url'] as String?) ?? (data['downloadUrl'] as String?);
+    return _SeccionAnalisis(
+      id: seccionId,
+      nombre: nombre,
+      fecha: (data['fecha'] as Timestamp?)?.toDate(),
+      recomendacionTexto: data['recomendacion_texto'] as String?,
+      recomendacionColor: data['recomendacion_color'] as String?,
+      url: url,
+    );
   }
 
-  void _onChangeAtLevel({required List<_AssetLevel> levels, required int levelIndex, required String? selected, required void Function(String?) assignSelectedFile}) {
-    setState(() {
-      if (selected == '__none__') {
-        levels[levelIndex] = levels[levelIndex].copyWith(selectedPath: null);
-        while (levels.length > levelIndex + 1) levels.removeLast();
-        assignSelectedFile(null);
-        return;
-      }
-      levels[levelIndex] = levels[levelIndex].copyWith(selectedPath: selected);
-      while (levels.length > levelIndex + 1) levels.removeLast();
-      assignSelectedFile(null);
-      if (selected == null || selected.isEmpty) return;
-      final entries = _childrenOfPrefix(levels[levelIndex].prefix);
-      final entry = entries.firstWhere((e) => e.fullPath == selected, orElse: () => const _AssetEntry(name: '', isDir: false, fullPath: '', isVirtualNone: true));
-      if (entry.isVirtualNone) return;
-      if (entry.isDir) {
-        levels.add(_AssetLevel(prefix: entry.fullPath));
-      } else {
-        assignSelectedFile(entry.fullPath);
-      }
-    });
-  }
-
-  List<DropdownMenuItem<String>> _itemsForLevel(String prefix) {
-    final entries = _childrenOfPrefix(prefix);
-    if (entries.length == 1 && entries.first.isVirtualNone) {
-      return [const DropdownMenuItem<String>(value: '__none__', enabled: false, child: Row(children: [Icon(Icons.not_interested), SizedBox(width: 8), Expanded(child: Text('Sin contenido'))]))];
+  _CasoGlobal get _estadoGlobal {
+    if (_secciones.isEmpty) return _CasoGlobal.desconocido;
+    bool hasRojo = false;
+    bool hasAmarillo = false;
+    bool anyConocido = false;
+    for (final seccion in _secciones) {
+      final color = _normalizaColor(seccion.recomendacionColor);
+      if (color == null) continue;
+      anyConocido = true;
+      if (color == 'rojo') return _CasoGlobal.rojo;
+      if (color == 'amarillo') hasAmarillo = true;
     }
-    return entries.map((e) {
-      final value = e.isVirtualNone ? '__none__' : e.fullPath;
-      return DropdownMenuItem<String>(
-        value: value,
-        enabled: !e.isVirtualNone,
-        child: Row(children: [
-          Icon(e.isVirtualNone ? Icons.not_interested : (e.isDir ? Icons.folder_outlined : Icons.insert_drive_file)),
-          const SizedBox(width: 8),
-          Expanded(child: Text(e.name, maxLines: 1, overflow: TextOverflow.ellipsis, softWrap: false)),
-        ]),
-      );
-    }).toList();
+    if (!anyConocido) return _CasoGlobal.desconocido;
+    if (hasAmarillo) return _CasoGlobal.amarillo;
+    return _CasoGlobal.verde;
   }
 
-  String _displayForSelected(String? selectedPath, String currentPrefix) {
-    if (selectedPath == null || selectedPath.isEmpty || selectedPath == '__none__') return 'Elige una opción…';
-    final entries = _childrenOfPrefix(currentPrefix);
-    final entry = entries.firstWhere((e) => e.fullPath == selectedPath, orElse: () => _AssetEntry(name: p.basename(selectedPath), isDir: selectedPath.endsWith('/'), fullPath: selectedPath));
-    return entry.name;
-  }
-
-  bool _canOpen(String? filePath) => (filePath != null && filePath.isNotEmpty && filePath != '__none__');
-
-  Future<void> _openSelectedAsset(String assetPath) async {
-    final ext = p.extension(assetPath).toLowerCase();
-    final isImage = ['.jpg', '.jpeg', '.png', '.gif', '.webp'].contains(ext);
-    final isPdf = ext == '.pdf';
-    if (isImage) {
-      if (!mounted) return;
-      Navigator.of(context).push(MaterialPageRoute(builder: (_) => _ImageViewerPage(assetPath: assetPath)));
-      return;
-    }
-    if (isPdf) {
-      final tmp = await _assetToTempFile(assetPath);
-      if (!mounted) return;
-      Navigator.of(context).push(MaterialPageRoute(builder: (_) => _PdfViewerPage(filePath: tmp.path)));
-      return;
-    }
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Formato no soportado. Usa PDF o JPG/PNG.')));
-  }
-
-  Future<File> _assetToTempFile(String assetPath) async {
-    final data = await rootBundle.load(assetPath);
-    final bytes = data.buffer.asUint8List();
-    final dir = await getTemporaryDirectory();
-    final filename = assetPath.split('/').last;
-    final file = File(p.join(dir.path, 'lab_sup_$filename'));
-    await file.writeAsBytes(bytes, flush: true);
-    return file;
-  }
+  bool get _palomitaProfundo => _decision?.reporteVigente ?? false;
 
   @override
   Widget build(BuildContext context) {
-    final sixMonthsAgo = DateTime.now().subtract(const Duration(days: 180));
-    final compactacionStream = FirebaseFirestore.instance.collection('resultados_analisis_compactacion').snapshots();
+    if (_loading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_error != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Text(
+            _error!,
+            style: const TextStyle(fontWeight: FontWeight.w600),
+            textAlign: TextAlign.center,
+          ),
+        ),
+      );
+    }
+
     return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 16),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text('Recomendaciones de compactación', style: TextStyle(fontWeight: FontWeight.w700, color: Colors.grey.shade800)),
-          const SizedBox(height: 10),
-          StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-            stream: compactacionStream,
-            builder: (context, snap) {
-              if (snap.connectionState == ConnectionState.waiting) return _loadingBox();
-              if (snap.hasError) return _errorBox('Error al cargar análisis: ${snap.error}');
-              final docs = (snap.data?.docs ?? []).where((d) {
-                final fecha = (d.data()['fecha'] as Timestamp?)?.toDate();
-                return fecha != null && fecha.isAfter(sixMonthsAgo);
-              }).toList()..sort((a, b) {
-                final fa = (a.data()['fecha'] as Timestamp).toDate();
-                final fb = (b.data()['fecha'] as Timestamp).toDate();
-                return fb.compareTo(fa);
-              });
-
-              if (docs.isEmpty) return _noRecomendacionBox();
-              final data = docs.first.data();
-              final nombre = (data['nombre'] as String?) ?? 'Análisis de Compactación';
-              final fecha = (data['fecha'] as Timestamp?)?.toDate();
-              final fechaStr = fecha == null ? '' : DateFormat('yyyy-MM-dd HH:mm').format(fecha);
-              final url = data['downloadUrl'] as String?;
-              final mayor = (data['avg_mayor_importancia'] as num?)?.toDouble();
-
-              if (mayor == null) return _warningBox('El último análisis no contiene "avg_mayor_importancia".');
-              final caso = _evaluarCaso(mayor);
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  _docPreviewCard(title: nombre, subtitle: 'Fecha: $fechaStr', enabled: url != null, onTap: url == null ? null : () => _openByUrl(context, url)),
-                  const SizedBox(height: 10),
-                  _estadoRectangulo(caso, _textoCaso(caso)),
-                  const SizedBox(height: 12),
-                  if (caso == _CasoCompactacion.rojo) ..._bloqueRojo(),
-                  if (caso == _CasoCompactacion.amarillo) ..._bloqueAmarillo(),
-                  if (caso == _CasoCompactacion.verde) ..._bloqueVerde(),
-                  const SizedBox(height: 16),
-                  Divider(color: Colors.black.withOpacity(0.15)),
-                  const SizedBox(height: 8),
-                  Text('Laboreo Superficial', style: TextStyle(fontWeight: FontWeight.w700, color: Colors.grey.shade800)),
-                  const SizedBox(height: 10),
-                  _dropdownLaboreoSelector(),
-                  const SizedBox(height: 12),
-                  if (!_manifestLoaded && _manifestError == null) _loadingBox()
-                  else if (_manifestError != null) _errorBox(_manifestError!)
-                  else _laboreoBrowser(),
-                  const SizedBox(height: 12),
-                  OutlinedButton.icon(
-                    icon: const Icon(Icons.assignment_outlined),
-                    onPressed: () => Navigator.of(context).push(MaterialPageRoute(
-                      builder: (_) => const ReporteActividadFormPage(
-                        titulo: 'Reporte de Actividad — Laboreo Superficial',
-                        subtipo: 'Reporte de Actividad Laboreo Superficial',
-                        coleccionDestino: 'reportes_preparacion_suelos',
-                      ),
-                    )),
-                    label: const Text('Reporte de Actividad (Laboreo Superficial)'),
-                  ),
-                ],
-              );
-            },
-          ),
-          const SizedBox(height: 16),
-          Text('Historial de reportes de actividad', style: TextStyle(fontWeight: FontWeight.w700, color: Colors.grey.shade800)),
-          const SizedBox(height: 8),
-          _repoDropdown(),
-          const SizedBox(height: 8),
-          _repoList(),
+          _buildLaboreoProfundo(context),
+          const SizedBox(height: 24),
+          Divider(color: Colors.black.withOpacity(0.1)),
+          const SizedBox(height: 24),
+          _buildLaboreoSuperficial(context),
         ],
       ),
     );
   }
 
-  Widget _reporteActividadButton({required String title, required String subtipo, required String coleccion}) {
-    return OutlinedButton.icon(
-      icon: const Icon(Icons.assignment_outlined),
-      style: OutlinedButton.styleFrom(foregroundColor: Colors.black87, side: BorderSide(color: Colors.black.withOpacity(0.25)), padding: const EdgeInsets.symmetric(vertical: 12), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
-      onPressed: () => Navigator.of(context).push(MaterialPageRoute(
-        builder: (_) => ReporteActividadFormPage(
-          titulo: title,
-          subtipo: subtipo,
-          coleccionDestino: coleccion,
-        ),
-      )),
-      label: const Text('Reporte de Actividad', style: TextStyle(fontWeight: FontWeight.w600)),
+  Widget _buildLaboreoProfundo(BuildContext context) {
+    final theme = Theme.of(context);
+    final children = <Widget>[
+      Text('Laboreo Profundo', style: theme.textTheme.titleLarge),
+      const SizedBox(height: 12),
+      if (_secciones.isEmpty)
+        _placeholderCard('No hay secciones registradas para la unidad.'),
+      for (final seccion in _secciones) _seccionCard(context, seccion),
+    ];
+
+    if (_palomitaProfundo && _decision?.ultimoReporteAt != null) {
+      children.add(const SizedBox(height: 12));
+      children.add(_palomitaRow(
+        'Reporte de actividad vigente',
+        _decision!.ultimoReporteAt!,
+      ));
+    }
+
+    children.add(const SizedBox(height: 16));
+
+    switch (_estadoGlobal) {
+      case _CasoGlobal.verde:
+        children.add(
+          _infoChip(
+            icon: Icons.verified,
+            color: Colors.green.shade600,
+            text: 'Todas las secciones están en verde. No se requiere laboreo profundo.',
+          ),
+        );
+        break;
+      case _CasoGlobal.amarillo:
+        children.addAll(_bloqueAmarillo());
+        break;
+      case _CasoGlobal.rojo:
+        children.addAll(_bloqueRojo());
+        break;
+      case _CasoGlobal.desconocido:
+        children.add(_placeholderCard(
+            'No se encontraron recomendaciones recientes para las secciones.'));
+        break;
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: children,
     );
   }
 
-  List<Widget> _bloqueRojo() {
-    return [_reporteActividadButton(title: 'Reporte de Actividad (Laboreo Profundo)', subtipo: 'Reporte de Actividad Laboreo Profundo', coleccion: 'reportes_preparacion_suelos')];
+  Widget _buildLaboreoSuperficial(BuildContext context) {
+    final theme = Theme.of(context);
+    final children = <Widget>[
+      Text('Laboreo Superficial', style: theme.textTheme.titleLarge),
+      const SizedBox(height: 12),
+      Text('Selecciona el tipo de laboreo superficial a registrar:',
+          style: theme.textTheme.bodyMedium),
+      const SizedBox(height: 8),
+      DropdownButtonFormField<String>(
+        value: _superficialOption,
+        items: _superficialOptions
+            .map((opt) => DropdownMenuItem<String>(value: opt, child: Text(opt)))
+            .toList(),
+        onChanged: (value) {
+          if (value != null) {
+            setState(() => _superficialOption = value);
+          }
+        },
+      ),
+      const SizedBox(height: 12),
+      _manualPlaceholder(),
+      const SizedBox(height: 12),
+      SizedBox(
+        width: double.infinity,
+        child: OutlinedButton.icon(
+          icon: const Icon(Icons.add_circle_outline),
+          onPressed: _addingSuperficial ? null : _agregarLaboreoSuperficial,
+          label: Text(_addingSuperficial
+              ? 'Agregando…'
+              : 'Agregar Laboreo Superficial'),
+        ),
+      ),
+      const SizedBox(height: 20),
+      if (_superficiales.isEmpty)
+        _placeholderCard('Aún no se han registrado actividades de laboreo superficial.'),
+      for (final registro in _superficiales)
+        _superficialCard(context, registro),
+    ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: children,
+    );
+  }
+
+  Widget _seccionCard(BuildContext context, _SeccionAnalisis seccion) {
+    final theme = Theme.of(context);
+    final fecha = seccion.fecha;
+    final fechaFmt =
+        fecha == null ? 'Sin fecha disponible' : DateFormat('dd/MM/yyyy').format(fecha);
+    final color = _normalizaColor(seccion.recomendacionColor);
+    final textoRecomendacion = seccion.recomendacionTexto?.trim();
+
+    return Card(
+      margin: const EdgeInsets.symmetric(vertical: 8),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Text('Sección ${seccion.id}', style: theme.textTheme.titleMedium),
+                const Spacer(),
+                Icon(Icons.segment, color: theme.colorScheme.primary),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text('Fecha: $fechaFmt', style: theme.textTheme.bodySmall),
+            if (seccion.nombre != null) ...[
+              const SizedBox(height: 6),
+              Text(
+                seccion.nombre!,
+                style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+              ),
+            ],
+            if (color != null && textoRecomendacion != null) ...[
+              const SizedBox(height: 12),
+              _barraRecomendacion(color, textoRecomendacion),
+            ],
+            const SizedBox(height: 12),
+            Align(
+              alignment: Alignment.centerRight,
+              child: OutlinedButton.icon(
+                icon: const Icon(Icons.visibility_outlined),
+                label: const Text('Vista previa'),
+                onPressed: seccion.url == null
+                    ? null
+                    : () => _abrirUrl(seccion.url!),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   List<Widget> _bloqueAmarillo() {
-    if (_loadingDecision) return [const Center(child: Padding(padding: EdgeInsets.all(12.0), child: CircularProgressIndicator()))];
-    if (_amarilloDecision == _DecisionAmarillo.realizar) {
-      return [_reporteActividadButton(title: 'Reporte de Actividad (Laboreo Profundo)', subtipo: 'Reporte de Actividad Laboreo Profundo', coleccion: 'reportes_preparacion_suelos'), const SizedBox(height: 10), _volverSeleccionButton()];
+    if (_savingDecision) {
+      return const [Center(child: Padding(padding: EdgeInsets.all(12), child: CircularProgressIndicator()))];
     }
-    if (_amarilloDecision == _DecisionAmarillo.no_realizar) {
+
+    final decision = _decision?.decision;
+    if (_showDecisionForm || decision == null) {
       return [
-        Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(color: Colors.green.withOpacity(0.08), borderRadius: BorderRadius.circular(10), border: Border.all(color: Colors.green.withOpacity(0.35))),
-          child: Row(children: [const Icon(Icons.check_circle, color: Colors.green), const SizedBox(width: 8), Expanded(child: Text('Selección guardada', style: TextStyle(color: Colors.green.shade800, fontWeight: FontWeight.w700)))]),
+        Text(
+          'Se detectaron secciones en amarillo. Define la acción a seguir y se guardará para futuras sesiones.',
+          style: Theme.of(context).textTheme.bodyMedium,
         ),
-        const SizedBox(height: 10),
-        _volverSeleccionButton(),
+        const SizedBox(height: 12),
+        DropdownButtonFormField<String>(
+          value: null,
+          items: const [
+            DropdownMenuItem(value: 'realizar', child: Text('Realizar Laboreo Profundo')),
+            DropdownMenuItem(value: 'no_realizar', child: Text('No realizar (mantener monitoreo)')),
+          ],
+          decoration: const InputDecoration(labelText: 'Decisión'),
+          onChanged: (value) {
+            if (value != null) {
+              _guardarDecision(value, 'amarillo_usuario');
+            }
+          },
+        ),
       ];
     }
+
+    if (decision == 'no_realizar') {
+      return [
+        _infoChip(
+          icon: Icons.check_circle_outline,
+          color: Colors.green.shade600,
+          text: 'Actividad registrada como “No realizar”.',
+        ),
+        const SizedBox(height: 8),
+        TextButton.icon(
+          onPressed: () => setState(() => _showDecisionForm = true),
+          icon: const Icon(Icons.edit_note),
+          label: const Text('Tomar otra decisión'),
+        ),
+      ];
+    }
+
     return [
-      Row(children: [
-        Expanded(child: ElevatedButton.icon(icon: const Icon(Icons.playlist_add_check), style: ElevatedButton.styleFrom(backgroundColor: kOrange, foregroundColor: Colors.black, padding: const EdgeInsets.symmetric(vertical: 12), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))), onPressed: () async { setState(() => _amarilloDecision = _DecisionAmarillo.realizar); await _saveDecision(_DecisionAmarillo.realizar); }, label: const Text('Realizar Actividad', style: TextStyle(fontWeight: FontWeight.w700)))),
-        const SizedBox(width: 10),
-        Expanded(child: OutlinedButton.icon(icon: const Icon(Icons.block), style: OutlinedButton.styleFrom(foregroundColor: Colors.black87, side: BorderSide(color: Colors.black.withOpacity(0.25)), padding: const EdgeInsets.symmetric(vertical: 12), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))), onPressed: () async { setState(() => _amarilloDecision = _DecisionAmarillo.no_realizar); await _saveDecision(_DecisionAmarillo.no_realizar); if (!mounted) return; ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No se requiere realizar actividad. Selección guardada.'))); }, label: const Text('No Requiere Realizar Actividad', style: TextStyle(fontWeight: FontWeight.w700)))),
-      ]),
+      _manualPlaceholder(),
+      const SizedBox(height: 12),
+      SizedBox(
+        width: double.infinity,
+        child: ElevatedButton.icon(
+          icon: const Icon(Icons.assignment_outlined),
+          label: const Text('Reporte de Actividad'),
+          onPressed: () => _abrirReporteProfundo('amarillo_usuario'),
+        ),
+      ),
     ];
   }
 
-  Widget _volverSeleccionButton() {
-    return OutlinedButton.icon(
-      icon: const Icon(Icons.undo),
-      style: OutlinedButton.styleFrom(foregroundColor: Colors.black87, side: BorderSide(color: Colors.black.withOpacity(0.25)), padding: const EdgeInsets.symmetric(vertical: 12), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
-      onPressed: () async {
-        setState(() => _amarilloDecision = _DecisionAmarillo.none);
-        await _saveDecision(_DecisionAmarillo.none);
-      },
-      label: const Text('Volver a la Selección', style: TextStyle(fontWeight: FontWeight.w700)),
+  List<Widget> _bloqueRojo() {
+    return [
+      _infoChip(
+        icon: Icons.priority_high,
+        color: Colors.red.shade600,
+        text:
+            'Se detectaron secciones en rojo. Se recomienda realizar laboreo profundo de inmediato.',
+      ),
+      const SizedBox(height: 12),
+      _manualPlaceholder(),
+      const SizedBox(height: 12),
+      SizedBox(
+        width: double.infinity,
+        child: ElevatedButton.icon(
+          icon: const Icon(Icons.assignment_outlined),
+          label: const Text('Reporte de Actividad'),
+          onPressed: () => _abrirReporteProfundo('rojo_auto'),
+        ),
+      ),
+    ];
+  }
+
+  Widget _superficialCard(BuildContext context, _ActividadSuperficialState registro) {
+    final theme = Theme.of(context);
+    final fecha = registro.createdAt;
+    final fechaTxt = fecha == null
+        ? 'Fecha no disponible'
+        : DateFormat('dd/MM/yyyy HH:mm', 'es_MX').format(fecha);
+    final actividades = registro.actividades.map(_nombreActividad).toList();
+
+    return Card(
+      margin: const EdgeInsets.symmetric(vertical: 8),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Text('Registro creado el $fechaTxt',
+                    style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
+                const Spacer(),
+                if (registro.reporteVigente && registro.reporteEmitidoAt != null)
+                  _palomitaRow('Reporte vigente', registro.reporteEmitidoAt!),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: actividades
+                  .map((actividad) => Chip(
+                        avatar: const Icon(Icons.agriculture, size: 18),
+                        label: Text(actividad),
+                      ))
+                  .toList(),
+            ),
+            const SizedBox(height: 12),
+            _manualPlaceholder(),
+            const SizedBox(height: 12),
+            Align(
+              alignment: Alignment.centerRight,
+              child: ElevatedButton.icon(
+                icon: const Icon(Icons.assignment_outlined),
+                label: const Text('Reporte de Actividad'),
+                onPressed: () => _abrirReporteSuperficial(registro),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
-  List<Widget> _bloqueVerde() {
-    return [Row(children: [const Icon(Icons.verified, color: Colors.green), const SizedBox(width: 8), Text('Compactación Aceptable', style: TextStyle(color: Colors.green.shade800, fontWeight: FontWeight.w700))])];
+  Future<void> _guardarDecision(String decision, String fuente) async {
+    if (_uid == null || _unidadId == null) return;
+    setState(() {
+      _savingDecision = true;
+      _showDecisionForm = false;
+    });
+    try {
+      final ref = await _service.guardarDecisionProfundo(
+        uid: _uid!,
+        unidadId: _unidadId!,
+        decision: decision,
+        fuente: fuente,
+      );
+      final snap = await ref.get();
+      setState(() {
+        _decision = _DecisionProfundoState.fromSnapshot(snap);
+      });
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Decisión guardada correctamente.')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No se pudo guardar la decisión: $e')),
+      );
+      setState(() => _showDecisionForm = true);
+    } finally {
+      if (mounted) {
+        setState(() => _savingDecision = false);
+      }
+    }
   }
 
-  Widget _dropdownLaboreoSelector() { return Container(); }
-  Widget _laboreoBrowser() { return Container(); }
-  Widget _repoDropdown() { return Container(); }
-  Widget _repoList() { return Container(); }
-  Widget _loadingBox() { return const Center(child: CircularProgressIndicator()); }
-  Widget _errorBox(String msg) { return Container(padding: const EdgeInsets.all(12), color: Colors.red.shade100, child: Text(msg)); }
-  Widget _warningBox(String msg) { return Container(padding: const EdgeInsets.all(12), color: Colors.amber.shade100, child: Text(msg)); }
-  Widget _placeholderCard(String text) { return Container(padding: const EdgeInsets.all(12), child: Text(text)); }
-  Widget _noRecomendacionBox() { return Container(padding: const EdgeInsets.all(14), child: const Text('No hay ninguna recomendación emitida.')); }
-  Widget _docPreviewCard({required String title, required String subtitle, bool enabled = true, VoidCallback? onTap}) { return ListTile(title: Text(title), subtitle: Text(subtitle), enabled: enabled, onTap: onTap); }
-  Widget _estadoRectangulo(_CasoCompactacion caso, String texto) { return Container(padding: const EdgeInsets.all(14), child: Text(texto)); }
-  Future<void> _openByUrl(BuildContext context, String url) async { /* ... */ }
-}
+  Future<String?> _ensureDecisionDoc({
+    required String decision,
+    required String fuente,
+  }) async {
+    if (_uid == null || _unidadId == null) return null;
+    if (_decision != null &&
+        _decision!.decision == decision &&
+        (_decision!.fuente ?? '') == fuente &&
+        _decision!.docId.isNotEmpty) {
+      return _decision!.docId;
+    }
 
-class _PdfViewerPage extends StatelessWidget {
-  final String filePath;
-  const _PdfViewerPage({required this.filePath});
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text(p.basename(filePath))),
-      body: PDFView(filePath: filePath),
+    final ref = await _service.guardarDecisionProfundo(
+      uid: _uid!,
+      unidadId: _unidadId!,
+      decision: decision,
+      fuente: fuente,
+    );
+    final snap = await ref.get();
+    setState(() {
+      _decision = _DecisionProfundoState.fromSnapshot(snap);
+      _showDecisionForm = false;
+    });
+    return _decision?.docId;
+  }
+
+  Future<void> _abrirReporteProfundo(String fuente) async {
+    if (_uid == null || _unidadId == null) return;
+    setState(() => _savingDecision = true);
+    try {
+      final docId = await _ensureDecisionDoc(decision: 'realizar', fuente: fuente);
+      setState(() => _savingDecision = false);
+      if (docId == null) return;
+      final result = await context.push<bool>(
+        AppRoutes.reporteLaboreoProfundo,
+        extra: LaboreoProfundoArgs(
+          uid: _uid!,
+          unidadId: _unidadId!,
+          decisionFuente: fuente,
+          decisionDocId: docId,
+        ),
+      );
+      if (result == true) {
+        await _refreshDecision();
+      }
+    } catch (e) {
+      setState(() => _savingDecision = false);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No se pudo abrir el reporte: $e')),
+      );
+    }
+  }
+
+  Future<void> _refreshDecision() async {
+    if (_uid == null || _unidadId == null) return;
+    final snap =
+        await _service.decisionProfundoDoc(uid: _uid!, unidadId: _unidadId!);
+    setState(() {
+      _decision = snap == null ? null : _DecisionProfundoState.fromSnapshot(snap);
+      _showDecisionForm = _decision?.decision == null;
+    });
+  }
+
+  Future<void> _agregarLaboreoSuperficial() async {
+    if (_uid == null || _unidadId == null) return;
+    final actividades = _mapActividadesDesdeSeleccion(_superficialOption);
+    if (actividades.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Selecciona una actividad válida.')),
+      );
+      return;
+    }
+    setState(() => _addingSuperficial = true);
+    try {
+      await _service.crearSuperficial(
+        uid: _uid!,
+        unidadId: _unidadId!,
+        actividades: actividades,
+      );
+      await _refreshSuperficiales();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Actividad de laboreo superficial registrada.')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No se pudo registrar la actividad: $e')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _addingSuperficial = false);
+      }
+    }
+  }
+
+  Future<void> _refreshSuperficiales() async {
+    if (_uid == null || _unidadId == null) return;
+    final docs = await _service.actividadesSuperficiales(
+      uid: _uid!,
+      unidadId: _unidadId!,
+    );
+    setState(() {
+      _superficiales = docs.map(_ActividadSuperficialState.fromSnapshot).toList();
+    });
+  }
+
+  Future<void> _abrirReporteSuperficial(
+      _ActividadSuperficialState registro) async {
+    if (_uid == null || _unidadId == null) return;
+    final result = await context.push<bool>(
+      AppRoutes.reporteLaboreoSuperficial,
+      extra: LaboreoSuperficialArgs(
+        uid: _uid!,
+        unidadId: _unidadId!,
+        actividades: registro.actividades,
+        actividadDocId: registro.docId,
+      ),
+    );
+    if (result == true) {
+      await _refreshSuperficiales();
+    }
+  }
+
+  List<String> _mapActividadesDesdeSeleccion(String seleccion) {
+    switch (seleccion) {
+      case 'Rastreo':
+        return const ['rastra'];
+      case 'Desterronador':
+        return const ['desterronador'];
+      case 'Ambos':
+        return const ['rastra', 'desterronador'];
+      default:
+        return const [];
+    }
+  }
+
+  String _nombreActividad(String raw) {
+    switch (raw.toLowerCase()) {
+      case 'rastra':
+        return 'Rastreo';
+      case 'desterronador':
+        return 'Desterronador';
+      default:
+        return raw;
+    }
+  }
+
+  Widget _manualPlaceholder() {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.grey.shade100,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade300),
+      ),
+      padding: const EdgeInsets.all(12),
+      child: Row(
+        children: [
+          const Icon(Icons.menu_book_outlined, color: Colors.grey),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              'Manual próximamente',
+              style: TextStyle(
+                color: Colors.grey.shade700,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
-}
 
-class _ImageViewerPage extends StatelessWidget {
-  final String assetPath;
-  const _ImageViewerPage({required this.assetPath});
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text(p.basename(assetPath))),
-      body: InteractiveViewer(child: Center(child: Image.asset(assetPath))),
+  Widget _palomitaRow(String label, DateTime fecha) {
+    final fechaTxt = DateFormat('dd/MM/yyyy').format(fecha);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Icon(Icons.check_circle, color: Colors.green),
+        const SizedBox(width: 6),
+        Text('$label — $fechaTxt',
+            style: const TextStyle(fontWeight: FontWeight.w600)),
+      ],
     );
+  }
+
+  Widget _infoChip({required IconData icon, required Color color, required String text}) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withOpacity(0.4)),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: color),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              text,
+              style: TextStyle(color: color, fontWeight: FontWeight.w600),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _placeholderCard(String text) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade300),
+      ),
+      child: Text(text, style: const TextStyle(fontWeight: FontWeight.w500)),
+    );
+  }
+
+  Widget _barraRecomendacion(String color, String texto) {
+    Color bg;
+    switch (color) {
+      case 'verde':
+        bg = Colors.green.shade600;
+        break;
+      case 'amarillo':
+        bg = Colors.amber.shade600;
+        break;
+      case 'rojo':
+        bg = Colors.red.shade600;
+        break;
+      default:
+        bg = Colors.blueGrey.shade400;
+    }
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        texto,
+        style: const TextStyle(
+          color: Colors.white,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _abrirUrl(String url) async {
+    final uri = Uri.tryParse(url);
+    if (uri == null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No se pudo abrir el enlace proporcionado.')),
+      );
+      return;
+    }
+    if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No se pudo abrir el documento.')),
+      );
+    }
+  }
+
+  static String? _normalizaColor(String? raw) {
+    final value = raw?.trim().toLowerCase();
+    if (value == null || value.isEmpty) return null;
+    if (value == 'verde' || value == 'amarillo' || value == 'rojo') {
+      return value;
+    }
+    return null;
+  }
+
+  static bool _isWithinSixMonths(DateTime? date) {
+    if (date == null) return false;
+    final now = DateTime.now();
+    final difference = now.difference(date).inDays;
+    return difference <= 180;
   }
 }
