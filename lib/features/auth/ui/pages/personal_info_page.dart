@@ -7,6 +7,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
 
+import 'package:agro_app/widgets/upload_overlay.dart';
+
 class PersonalInfoPage extends StatefulWidget {
   const PersonalInfoPage({super.key});
 
@@ -98,7 +100,9 @@ class _PersonalInfoPageState extends State<PersonalInfoPage> {
       // 1. Si se seleccionó una nueva imagen, subirla a Firebase Storage
       if (_imageFile != null) {
         final ref = FirebaseStorage.instance.ref().child('profile_pictures').child('${user.uid}.jpg');
-        await ref.putFile(_imageFile!);
+        final uploadTask = ref.putFile(_imageFile!);
+        showUploadOverlayForTask(context, uploadTask, label: 'Subiendo foto de perfil…');
+        await uploadTask;
         newPhotoUrl = await ref.getDownloadURL();
       }
 

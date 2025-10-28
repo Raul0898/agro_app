@@ -18,6 +18,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 import 'dart:io';
 import 'package:flutter_pdfview/flutter_pdfview.dart';
+import 'package:agro_app/widgets/upload_overlay.dart';
 
 class VerificacionCompactacionPage extends StatefulWidget {
   const VerificacionCompactacionPage({super.key});
@@ -1011,7 +1012,16 @@ class _VerificacionCompactacionPageState extends State<VerificacionCompactacionP
       final storage = FirebaseStorage.instance;
       final fileName = 'verificacion_${uid}_${DateFormat('yyyyMMdd_HHmmss').format(fecha)}.pdf';
       final ref = storage.ref().child('verificaciones_compactacion').child(uid).child(fileName);
-      await ref.putData(bytes, SettableMetadata(contentType: 'application/pdf'));
+      final uploadTask = ref.putData(
+        bytes,
+        SettableMetadata(contentType: 'application/pdf'),
+      );
+      showUploadOverlayForTask(
+        context,
+        uploadTask,
+        label: 'Subiendo reporte…',
+      );
+      await uploadTask;
       final url = await ref.getDownloadURL();
       return url;
     } catch (e) {

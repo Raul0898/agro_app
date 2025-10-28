@@ -1,4 +1,5 @@
 // lib/features/auth/ui/pages/analisis_suelo_page.dart
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show rootBundle;
@@ -18,6 +19,7 @@ import 'package:agro_app/features/auth/ui/pages/analisis_compactacion_botton_pag
 import 'package:agro_app/features/auth/ui/pages/reporte_actividad_form_page.dart';
 import 'package:agro_app/features/auth/ui/pages/reporte_actividad_nutrientes.dart';
 import 'package:agro_app/features/auth/ui/pages/analisis_nutrientes_botton_page.dart';
+import 'package:agro_app/widgets/upload_overlay.dart';
 
 class SectionOption {
   final String label;
@@ -233,28 +235,25 @@ class _AnalysisSoilPageState extends State<AnalysisSoilPage> {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) { _snack('Debes iniciar sesión para subir archivos.', error: true); return; }
 
-    int subidos = 0;
-    showDialog(
-      context: context, barrierDismissible: false,
-      builder: (_) => StatefulBuilder(
-        builder: (ctx, setStateDialog) => AlertDialog(
-          title: const Text('Subiendo archivos…'),
-          content: Row(children: [
-            const CircularProgressIndicator(strokeWidth: 3),
-            const SizedBox(width: 12),
-            Expanded(child: Text('Completados: $subidos / ${archivos.length}')),
-          ]),
-        ),
-      ),
+    final progressCtrl = StreamController<UploadOverlayStatus>();
+    final disposeOverlay = showUploadOverlayForStream(
+      context,
+      progressCtrl.stream,
+      label: 'Subiendo archivos…',
     );
 
     try {
+      progressCtrl.add(UploadOverlayStatus(
+        progress: archivos.isEmpty ? 1.0 : 0.0,
+        detail: 'Completados: 0 / ${archivos.length}',
+      ));
+      int subidos = 0;
       for (int i = 0; i < archivos.length; i++) {
         final f = archivos[i];
         final path = construirPath(i, f);
         final ref = FirebaseStorage.instance.ref(path);
         final bytes = await f.readAsBytes();
-        final snap = await ref.putData(
+        final uploadTask = ref.putData(
           bytes,
           SettableMetadata(
             contentType: contentType,
@@ -263,6 +262,7 @@ class _AnalysisSoilPageState extends State<AnalysisSoilPage> {
             },
           ),
         );
+        final snap = await uploadTask;
         final url = await snap.ref.getDownloadURL();
 
         // ---- escribimos metadata + TTL (expireAt) ----
@@ -283,26 +283,17 @@ class _AnalysisSoilPageState extends State<AnalysisSoilPage> {
             .doc(docId).set(meta, SetOptions(merge: true));
 
         subidos++;
-        if (context.mounted) {
-          Navigator.of(context).pop();
-          showDialog(
-            context: context, barrierDismissible: false,
-            builder: (_) => AlertDialog(
-              title: const Text('Subiendo archivos…'),
-              content: Row(children: [
-                const CircularProgressIndicator(strokeWidth: 3),
-                const SizedBox(width: 12),
-                Expanded(child: Text('Completados: $subidos / ${archivos.length}')),
-              ]),
-            ),
-          );
-        }
+        progressCtrl.add(UploadOverlayStatus(
+          progress: archivos.isEmpty ? 1.0 : subidos / archivos.length,
+          detail: 'Completados: $subidos / ${archivos.length}',
+        ));
       }
-      if (context.mounted) Navigator.of(context).pop();
       _snack('Archivos subidos correctamente.');
     } catch (e) {
-      if (context.mounted) Navigator.of(context).pop();
       _snack('Error al subir archivos: $e', error: true);
+    } finally {
+      await progressCtrl.close();
+      disposeOverlay();
     }
   }
 

@@ -14,6 +14,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
 import 'package:agro_app/core/firestore/repo_queries.dart';
+import 'package:agro_app/widgets/upload_overlay.dart';
 
 class ReporteActividadFormPage extends StatefulWidget {
   final String titulo;
@@ -438,7 +439,13 @@ class _ReporteActividadFormPageState extends State<ReporteActividadFormPage> {
         'tipo': widget.subtipo,
       },
     );
-    await ref.putData(data, metadata);
+    final uploadTask = ref.putData(data, metadata);
+    showUploadOverlayForTask(
+      context,
+      uploadTask,
+      label: 'Subiendo archivo…',
+    );
+    await uploadTask;
     final url = await ref.getDownloadURL();
     return (path, url);
   }
