@@ -1,7 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -620,9 +619,9 @@ class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
       final docId = await _ensureDecisionDoc(decision: 'realizar', fuente: fuente);
       setState(() => _savingDecision = false);
       if (docId == null) return;
-      final result = await GoRouter.of(context).push<bool>(
+      final result = await Navigator.of(context).pushNamed<bool>(
         AppRoutes.reporteLaboreoProfundo,
-        extra: LaboreoProfundoArgs(
+        arguments: LaboreoProfundoArgs(
           uid: _uid!,
           unidadId: _unidadId!,
           decisionFuente: fuente,
@@ -699,9 +698,9 @@ class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
   Future<void> _abrirReporteSuperficial(
       _ActividadSuperficialState registro) async {
     if (_uid == null || _unidadId == null) return;
-    final result = await GoRouter.of(context).push<bool>(
+    final result = await Navigator.of(context).pushNamed<bool>(
       AppRoutes.reporteLaboreoSuperficial,
-      extra: LaboreoSuperficialArgs(
+      arguments: LaboreoSuperficialArgs(
         uid: _uid!,
         unidadId: _unidadId!,
         actividades: registro.actividades,
