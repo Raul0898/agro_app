@@ -71,13 +71,22 @@ class LaboreoService {
   }
 
   String _slugFromName(String name) {
-    final sanitized = name.trim().toLowerCase();
-    final slug = sanitized
-        .replaceAll(RegExp(r"[\s\/]+"), '_')
-        .replaceAll(RegExp(r"[^a-z0-9_]+"), '')
-        .replaceAll(RegExp(r"_+"), '_')
-        .replaceAll(RegExp(r"^_+|_+$"), '');
-    return slug.isEmpty ? sanitized : slug;
+    final trimmed = name.trim();
+    final numericMatch = RegExp(r'(\d+)').firstMatch(trimmed);
+    if (numericMatch != null) {
+      return 'seccion_${numericMatch.group(1)}';
+    }
+
+    final sanitized = trimmed
+        .toLowerCase()
+        .replaceAll(RegExp(r'[\\/]+'), '-')
+        .replaceAll(RegExp(r'[^a-z0-9_\s-]'), '')
+        .replaceAll(RegExp(r'\s+'), '_')
+        .replaceAll(RegExp(r'_+'), '_')
+        .replaceAll(RegExp(r'^_|_$'), '');
+
+    if (sanitized.isEmpty) return 'seccion';
+    return sanitized.startsWith('seccion_') ? sanitized : 'seccion_$sanitized';
   }
 
   Future<QueryDocumentSnapshot<Map<String, dynamic>>?> ultimoCompactacionPorSeccion({
