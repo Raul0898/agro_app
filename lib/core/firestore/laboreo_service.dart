@@ -71,7 +71,25 @@ class LaboreoService {
     required String decision, // "realizar" | "no_realizar"
     required String fuente, // "amarillo_usuario" | "rojo_auto"
   }) async {
-    return _db.collection('actividades_laboreo_profundo').add({
+    final collection = _db.collection('actividades_laboreo_profundo');
+
+    final existing = await collection
+        .where('uid', isEqualTo: uid)
+        .where('unidad', isEqualTo: unidadId)
+        .limit(1)
+        .get();
+
+    if (existing.docs.isNotEmpty) {
+      final ref = existing.docs.first.reference;
+      await ref.update({
+        'decision': decision,
+        'fuente': fuente,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+      return ref;
+    }
+
+    return collection.add({
       'uid': uid,
       'unidad': unidadId,
       'decision': decision,
