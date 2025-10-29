@@ -620,7 +620,7 @@ class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
       final docId = await _ensureDecisionDoc(decision: 'realizar', fuente: fuente);
       setState(() => _savingDecision = false);
       if (docId == null) return;
-      final result = await context.push<bool>(
+      final result = await GoRouter.of(context).push<bool>(
         AppRoutes.reporteLaboreoProfundo,
         extra: LaboreoProfundoArgs(
           uid: _uid!,
@@ -699,7 +699,7 @@ class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
   Future<void> _abrirReporteSuperficial(
       _ActividadSuperficialState registro) async {
     if (_uid == null || _unidadId == null) return;
-    final result = await context.push<bool>(
+    final result = await GoRouter.of(context).push<bool>(
       AppRoutes.reporteLaboreoSuperficial,
       extra: LaboreoSuperficialArgs(
         uid: _uid!,
