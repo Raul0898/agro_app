@@ -174,7 +174,7 @@ class _AnalysisSoilPageState extends State<AnalysisSoilPage> {
 
     final normalized = _stripDiacritics(trimmed.toLowerCase());
     final sanitized = normalized
-        .replaceAll(RegExp(r'[\s/]+'), '_')
+        .replaceAll(RegExp(r'[\s/\-]+'), '_')
         .replaceAll(RegExp(r'[^a-z0-9_]+'), '')
         .replaceAll(RegExp(r'_+'), '_')
         .replaceAll(RegExp(r'^_|_$'), '');
