@@ -10,7 +10,11 @@ import 'package:flutter/material.dart';
 import 'features/auth/ui/login_page.dart';
 import 'features/auth/ui/pages/selector_contexto_page.dart';
 import 'firebase_options.dart';
-import 'routes/app_router.dart';
+import 'home_page.dart';
+import 'splash_screen.dart';
+import 'core/router/app_routes.dart';
+import 'features/laboreo/reporte_actividad_laboreo_profundo.dart';
+import 'features/laboreo/reporte_actividad_laboreo_superficial.dart';
 
 /// ========= PALETA CORPORATIVA =========
 class AppColors {
@@ -497,15 +501,52 @@ class AgroApp extends StatelessWidget {
       ),
     );
 
-    return MaterialApp.router(
+    return MaterialApp(
       title: 'Agro App',
       debugShowCheckedModeBanner: false,
       themeMode: ThemeMode.system,
       theme: lightTheme,
       darkTheme: darkTheme,
-
-      // === Cambio clave: mostramos Splash animado y luego AuthGate ===
-      routerConfig: appRouter,
+      initialRoute: '/',
+      onGenerateRoute: (settings) {
+        switch (settings.name) {
+          case '/':
+            return MaterialPageRoute<void>(
+              settings: settings,
+              builder: (_) => const SplashScreen(next: HomePage()),
+            );
+          case '/home':
+            return MaterialPageRoute<void>(
+              settings: settings,
+              builder: (_) => const HomePage(),
+            );
+          case AppRoutes.reporteLaboreoProfundo:
+            final args = settings.arguments;
+            if (args is! LaboreoProfundoArgs) {
+              throw ArgumentError('LaboreoProfundoArgs requerido');
+            }
+            return MaterialPageRoute<bool>(
+              settings: settings,
+              builder: (_) =>
+                  ReporteActividadLaboreoProfundoPage(args: args),
+            );
+          case AppRoutes.reporteLaboreoSuperficial:
+            final args = settings.arguments;
+            if (args is! LaboreoSuperficialArgs) {
+              throw ArgumentError('LaboreoSuperficialArgs requerido');
+            }
+            return MaterialPageRoute<bool>(
+              settings: settings,
+              builder: (_) =>
+                  ReporteActividadLaboreoSuperficialPage(args: args),
+            );
+          default:
+            return MaterialPageRoute<void>(
+              settings: settings,
+              builder: (_) => const AuthGate(),
+            );
+        }
+      },
     );
   }
 }
