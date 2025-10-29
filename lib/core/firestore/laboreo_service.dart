@@ -7,7 +7,20 @@ class LaboreoService {
 
   Future<String?> unidadActualDelUsuario(String uid) async {
     final snap = await _db.collection('users').doc(uid).get();
-    return snap.data()?['unidad'] as String?;
+    final data = snap.data();
+    if (data == null) return null;
+
+    final unidadSeleccionada = (data['unidadSeleccionada'] as String?)?.trim();
+    if (unidadSeleccionada != null && unidadSeleccionada.isNotEmpty) {
+      return unidadSeleccionada;
+    }
+
+    final unidad = (data['unidad'] as String?)?.trim();
+    if (unidad != null && unidad.isNotEmpty) {
+      return unidad;
+    }
+
+    return null;
   }
 
   Future<List<String>> seccionesDeUnidad(String unidadId) async {
@@ -15,12 +28,46 @@ class LaboreoService {
     final data = snap.data() ?? <String, dynamic>{};
     final raw = (data['secciones'] ?? data['num_secciones']);
     if (raw is List) {
-      return raw.map((e) => e.toString()).toList();
+      return raw
+          .map((e) => _mapSeccionId(e))
+          .whereType<String>()
+          .toList();
     }
     if (raw is int) {
       return List<String>.generate(raw, (index) => '${index + 1}');
     }
     return <String>[];
+  }
+
+  String? _mapSeccionId(dynamic entry) {
+    if (entry is String) {
+      final trimmed = entry.trim();
+      return trimmed.isEmpty ? null : trimmed;
+    }
+    if (entry is Map) {
+      const preferredKeys = <String>['slug', 'valueSlug', 'id', 'uid', 'value'];
+      for (final key in preferredKeys) {
+        final value = entry[key];
+        if (value is String && value.trim().isNotEmpty) {
+          return value.trim();
+        }
+      }
+      final nombre = entry['nombre'] ?? entry['name'] ?? entry['title'] ?? entry['label'];
+      if (nombre is String && nombre.trim().isNotEmpty) {
+        return _slugFromName(nombre);
+      }
+    }
+    return null;
+  }
+
+  String _slugFromName(String name) {
+    final sanitized = name.trim().toLowerCase();
+    final slug = sanitized
+        .replaceAll(RegExp(r"[\s\/]+"), '_')
+        .replaceAll(RegExp(r"[^a-z0-9_]+"), '')
+        .replaceAll(RegExp(r"_+"), '_')
+        .replaceAll(RegExp(r"^_+|_+$"), '');
+    return slug.isEmpty ? sanitized : slug;
   }
 
   Future<QueryDocumentSnapshot<Map<String, dynamic>>?> ultimoCompactacionPorSeccion({
