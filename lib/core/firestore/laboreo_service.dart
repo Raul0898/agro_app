@@ -44,6 +44,16 @@ class LaboreoService {
       final trimmed = entry.trim();
       return trimmed.isEmpty ? null : trimmed;
     }
+    if (entry is num) {
+      if (entry.isNaN || entry.isInfinite) return null;
+      final normalized = entry is int
+          ? entry.toString()
+          : (entry == entry.truncate()
+              ? entry.truncate().toString()
+              : entry.toString());
+      final trimmed = normalized.trim();
+      return trimmed.isEmpty ? null : trimmed;
+    }
     if (entry is Map) {
       const preferredKeys = <String>['slug', 'valueSlug', 'id', 'uid', 'value'];
       for (final key in preferredKeys) {
