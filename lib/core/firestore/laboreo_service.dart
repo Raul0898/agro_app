@@ -72,21 +72,63 @@ class LaboreoService {
 
   String _slugFromName(String name) {
     final trimmed = name.trim();
-    final numericMatch = RegExp(r'(\d+)').firstMatch(trimmed);
-    if (numericMatch != null) {
-      return 'seccion_${numericMatch.group(1)}';
+    if (trimmed.isEmpty) return 'seccion';
+
+    if (RegExp(r'^\d+$').hasMatch(trimmed)) {
+      return 'seccion_$trimmed';
     }
 
-    final sanitized = trimmed
-        .toLowerCase()
-        .replaceAll(RegExp(r'[\\/]+'), '-')
-        .replaceAll(RegExp(r'[^a-z0-9_\s-]'), '')
-        .replaceAll(RegExp(r'\s+'), '_')
+    String _stripDiacritics(String input) {
+      const map = {
+        'á': 'a',
+        'à': 'a',
+        'ä': 'a',
+        'â': 'a',
+        'ã': 'a',
+        'å': 'a',
+        'ç': 'c',
+        'é': 'e',
+        'è': 'e',
+        'ë': 'e',
+        'ê': 'e',
+        'í': 'i',
+        'ì': 'i',
+        'ï': 'i',
+        'î': 'i',
+        'ñ': 'n',
+        'ó': 'o',
+        'ò': 'o',
+        'ö': 'o',
+        'ô': 'o',
+        'õ': 'o',
+        'ú': 'u',
+        'ù': 'u',
+        'ü': 'u',
+        'û': 'u',
+      };
+      final buffer = StringBuffer();
+      for (final rune in input.runes) {
+        final char = String.fromCharCode(rune);
+        buffer.write(map[char] ?? char);
+      }
+      return buffer.toString();
+    }
+
+    final normalized = _stripDiacritics(trimmed.toLowerCase());
+    final sanitized = normalized
+        .replaceAll(RegExp(r'[\s/]+'), '_')
+        .replaceAll(RegExp(r'[^a-z0-9_]+'), '')
         .replaceAll(RegExp(r'_+'), '_')
         .replaceAll(RegExp(r'^_|_$'), '');
 
     if (sanitized.isEmpty) return 'seccion';
-    return sanitized.startsWith('seccion_') ? sanitized : 'seccion_$sanitized';
+    if (sanitized.startsWith('seccion_')) return sanitized;
+    if (sanitized.startsWith('seccion')) {
+      final remainder = sanitized.substring('seccion'.length).replaceFirst(RegExp(r'^_'), '');
+      return remainder.isEmpty ? 'seccion' : 'seccion_$remainder';
+    }
+
+    return 'seccion_$sanitized';
   }
 
   Future<QueryDocumentSnapshot<Map<String, dynamic>>?> ultimoCompactacionPorSeccion({
