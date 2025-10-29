@@ -1,0 +1,1 @@
+Attempted to run `flutter pub get` to regenerate `.dart_tool/package_config.json`, but the Flutter and Dart SDKs are not available in the current environment. As a result, dependency fetching could not be executed within this container.
