@@ -37,6 +37,13 @@ class _SeccionAnalisis {
   bool get tieneDocumento => nombre != null || fecha != null || recomendacionTexto != null;
 }
 
+bool _isWithinSixMonths(DateTime? date) {
+  if (date == null) return false;
+  final now = DateTime.now();
+  final difference = now.difference(date).inDays;
+  return difference <= 180;
+}
+
 class _DecisionProfundoState {
   const _DecisionProfundoState({
     required this.docId,
@@ -861,10 +868,4 @@ class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
     return null;
   }
 
-  static bool _isWithinSixMonths(DateTime? date) {
-    if (date == null) return false;
-    final now = DateTime.now();
-    final difference = now.difference(date).inDays;
-    return difference <= 180;
-  }
 }
