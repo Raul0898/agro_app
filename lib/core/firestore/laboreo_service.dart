@@ -76,6 +76,7 @@ class LaboreoService {
     final existing = await collection
         .where('uid', isEqualTo: uid)
         .where('unidad', isEqualTo: unidadId)
+        .orderBy('updatedAt', descending: true)
         .limit(1)
         .get();
 
