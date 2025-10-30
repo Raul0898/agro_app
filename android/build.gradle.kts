@@ -1,3 +1,5 @@
+import org.gradle.api.tasks.Delete
+
 plugins {
     java
 }
@@ -29,6 +31,6 @@ java {
     }
 }
 
-tasks.register<Delete>("clean") {
+tasks.named<Delete>("clean") {
     delete(rootProject.layout.buildDirectory)
 }
