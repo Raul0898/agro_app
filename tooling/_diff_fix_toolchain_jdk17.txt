@@ -1,0 +1,67 @@
+diff --git a/android/app/build.gradle.kts b/android/app/build.gradle.kts
+index 19a10ec..99aca47 100644
+--- a/android/app/build.gradle.kts
++++ b/android/app/build.gradle.kts
+@@ -18,10 +18,6 @@ android {
+         targetCompatibility = JavaVersion.VERSION_17
+     }
+ 
+-    kotlinOptions {
+-        jvmTarget = "17"
+-    }
+-
+     defaultConfig {
+         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
+         applicationId = "com.example.agro_app"
+@@ -48,6 +44,12 @@ java {
+     }
+ }
+ 
++tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
++    kotlinOptions {
++        jvmTarget = "17"
++    }
++}
++
+ flutter {
+     source = "../.."
+ }
+diff --git a/android/build.gradle.kts b/android/build.gradle.kts
+index b2c202a..085386b 100644
+--- a/android/build.gradle.kts
++++ b/android/build.gradle.kts
+@@ -25,12 +25,6 @@ subprojects {
+     project.evaluationDependsOn(":app")
+ }
+ 
+-java {
+-    toolchain {
+-        languageVersion.set(JavaLanguageVersion.of(17))
+-    }
+-}
+-
+ tasks.named<Delete>("clean") {
+     delete(rootProject.layout.buildDirectory)
+ }
+diff --git a/android/gradle.properties b/android/gradle.properties
+index a1e91e6..2e45bc5 100644
+--- a/android/gradle.properties
++++ b/android/gradle.properties
+@@ -3,3 +3,5 @@ android.useAndroidX=true
+ android.nonTransitiveRClass=true
+ org.gradle.parallel=true
+ org.gradle.caching=true
++org.gradle.java.installations.auto-detect=true
++org.gradle.java.installations.auto-download=true
+diff --git a/android/settings.gradle.kts b/android/settings.gradle.kts
+index fb605bc..37e8feb 100644
+--- a/android/settings.gradle.kts
++++ b/android/settings.gradle.kts
+@@ -21,6 +21,7 @@ plugins {
+     id("dev.flutter.flutter-plugin-loader") version "1.0.0"
+     id("com.android.application") version "8.9.1" apply false
+     id("org.jetbrains.kotlin.android") version "2.1.0" apply false
++    id("org.gradle.toolchains.foojay-resolver-convention") version "0.8.0"
+ }
+ 
+ include(":app")
