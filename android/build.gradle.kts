@@ -25,12 +25,6 @@ subprojects {
     project.evaluationDependsOn(":app")
 }
 
-java {
-    toolchain {
-        languageVersion.set(JavaLanguageVersion.of(17))
-    }
-}
-
 tasks.named<Delete>("clean") {
     delete(rootProject.layout.buildDirectory)
 }
