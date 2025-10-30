@@ -1,5 +1,4 @@
 // lib/features/auth/ui/pages/selector_contexto_page.dart
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -115,9 +114,11 @@ class _SelectorContextoPageState extends State<SelectorContextoPage> {
       );
 
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('No se pudo guardar la selección: $e')),
       );
+      }
     }
   }
 
@@ -168,7 +169,7 @@ class _SelectorContextoPageState extends State<SelectorContextoPage> {
                           DropdownButtonFormField<String>(
                             isExpanded: true,
                             decoration: _dropdownDecoration('Unidad de Siembra'),
-                            value: _selectedUnidadId,
+                            initialValue: _selectedUnidadId,
                             items: _unidadesDisponibles.entries.map((entry) {
                               return DropdownMenuItem(value: entry.key, child: Text(entry.value.nombre));
                             }).toList(),
@@ -184,7 +185,7 @@ class _SelectorContextoPageState extends State<SelectorContextoPage> {
                           DropdownButtonFormField<String>(
                             isExpanded: true,
                             decoration: _dropdownDecoration('Tipo de Cultivo'),
-                            value: _selectedCultivo,
+                            initialValue: _selectedCultivo,
                             items: _cultivosDisponibles
                                 .map((c) => DropdownMenuItem(value: c, child: Text(c)))
                                 .toList(),

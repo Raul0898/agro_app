@@ -21,7 +21,6 @@ class _UserActionsButtonState extends State<UserActionsButton> {
   void _openMenu() {
     if (_entry != null) return;
     final overlay = Overlay.of(context);
-    if (overlay == null) return;
 
     final renderBox = _btnKey.currentContext!.findRenderObject() as RenderBox;
     final overlayBox = overlay.context.findRenderObject() as RenderBox;
@@ -85,7 +84,7 @@ class _UserActionsButtonState extends State<UserActionsButton> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
-          color: cs.surfaceVariant,
+          color: cs.surfaceContainerHighest,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: cs.outline),
         ),

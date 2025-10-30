@@ -331,7 +331,7 @@ class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
           style: theme.textTheme.bodyMedium),
       const SizedBox(height: 8),
       DropdownButtonFormField<String>(
-        value: _superficialOption,
+        initialValue: _superficialOption,
         items: _superficialOptions
             .map((opt) => DropdownMenuItem<String>(value: opt, child: Text(opt)))
             .toList(),
@@ -433,7 +433,7 @@ class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
         ),
         const SizedBox(height: 12),
         DropdownButtonFormField<String>(
-          value: null,
+          initialValue: null,
           items: const [
             DropdownMenuItem(value: 'realizar', child: Text('Realizar Laboreo Profundo')),
             DropdownMenuItem(value: 'no_realizar', child: Text('No realizar (mantener monitoreo)')),

@@ -8,7 +8,6 @@ import 'package:intl/intl.dart';
 // PDF / Storage
 import 'package:pdf/widgets.dart' as pw;
 import 'package:pdf/pdf.dart';
-import 'package:printing/printing.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/services.dart' show rootBundle;
 
@@ -540,7 +539,7 @@ class _VerificacionCompactacionPageState extends State<VerificacionCompactacionP
         }
 
         return DropdownButtonFormField<String>(
-          value: _selectedPdfId,
+          initialValue: _selectedPdfId,
           isExpanded: true,
           decoration: InputDecoration(
             prefixIcon: const Icon(Icons.picture_as_pdf),

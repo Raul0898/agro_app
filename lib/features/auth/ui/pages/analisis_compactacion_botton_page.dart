@@ -158,7 +158,9 @@ class _AnalisisCompactacionBottonPageState extends State<AnalisisCompactacionPag
 
   @override
   void dispose() {
-    for (final c in _psiCtrls) c.dispose();
+    for (final c in _psiCtrls) {
+      c.dispose();
+    }
     _nombreCtrl.dispose();
     super.dispose();
   }
@@ -174,7 +176,9 @@ class _AnalisisCompactacionBottonPageState extends State<AnalisisCompactacionPag
   }
 
   void _clearAll() {
-    for (final c in _psiCtrls) c.clear();
+    for (final c in _psiCtrls) {
+      c.clear();
+    }
     FocusScope.of(context).unfocus();
   }
 
@@ -225,7 +229,7 @@ class _AnalisisCompactacionBottonPageState extends State<AnalisisCompactacionPag
       'IMG/subsuelo.jpeg',
     ]);
 
-    pw.Widget _headerText() => pw.Column(
+    pw.Widget headerText() => pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
         pw.Text('Análisis de Compactación', style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold)),
@@ -265,7 +269,7 @@ class _AnalisisCompactacionBottonPageState extends State<AnalisisCompactacionPag
       );
     }
 
-    pw.Widget _promsBox() {
+    pw.Widget promsBox() {
       pw.Widget line(String label, double? v) => pw.Row(
         mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
         children: [pw.Text(label), pw.Text(v == null ? '—' : v.toStringAsFixed(2))],
@@ -291,7 +295,7 @@ class _AnalisisCompactacionBottonPageState extends State<AnalisisCompactacionPag
       );
     }
 
-    pw.Widget _recoBox() => pw.Container(
+    pw.Widget recoBox() => pw.Container(
       padding: const pw.EdgeInsets.all(14),
       decoration: pw.BoxDecoration(
         color: _colorForCaso(caso),
@@ -331,13 +335,13 @@ class _AnalisisCompactacionBottonPageState extends State<AnalisisCompactacionPag
                 fit: pw.BoxFit.contain,
               ),
             ),
-          _headerText(),
+          headerText(),
           pw.SizedBox(height: 10),
           pw.Table(border: pw.TableBorder.all(color: PdfColor.fromInt(0xFFD9D9D9)), defaultVerticalAlignment: pw.TableCellVerticalAlignment.middle, children: rows),
           pw.SizedBox(height: 12),
-          _promsBox(),
+          promsBox(),
           pw.SizedBox(height: 12),
-          _recoBox(),
+          recoBox(),
           pw.SizedBox(height: 8),
           pw.Row(
             mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
@@ -680,12 +684,11 @@ class _AnalisisCompactacionBottonPageState extends State<AnalisisCompactacionPag
           context: context,
           builder: (_) => Theme(
             data: Theme.of(context).copyWith(
-              dialogBackgroundColor: Colors.white,
               textTheme: Theme.of(context).textTheme.apply(
                 bodyColor: Colors.black,
                 displayColor: Colors.black,
               ),
-              iconTheme: const IconThemeData(color: Colors.black87),
+              iconTheme: const IconThemeData(color: Colors.black87), dialogTheme: DialogThemeData(backgroundColor: Colors.white),
             ),
             child: const AlertDialog(
               title: Text('No hay archivos', style: TextStyle(color: Colors.black)),
@@ -700,12 +703,11 @@ class _AnalisisCompactacionBottonPageState extends State<AnalisisCompactacionPag
         context: context,
         builder: (_) => Theme(
           data: Theme.of(context).copyWith(
-            dialogBackgroundColor: Colors.white,
             textTheme: Theme.of(context).textTheme.apply(
               bodyColor: Colors.black,
               displayColor: Colors.black,
             ),
-            iconTheme: const IconThemeData(color: Colors.black87),
+            iconTheme: const IconThemeData(color: Colors.black87), dialogTheme: DialogThemeData(backgroundColor: Colors.white),
           ),
           child: AlertDialog(
             title: const Text('Selecciona archivo a sobrescribir', style: TextStyle(color: Colors.black)),
@@ -753,12 +755,11 @@ class _AnalisisCompactacionBottonPageState extends State<AnalisisCompactacionPag
         context: context,
         builder: (_) => Theme(
           data: Theme.of(context).copyWith(
-            dialogBackgroundColor: Colors.white,
             textTheme: Theme.of(context).textTheme.apply(
               bodyColor: Colors.black,
               displayColor: Colors.black,
             ),
-            iconTheme: const IconThemeData(color: Colors.black87),
+            iconTheme: const IconThemeData(color: Colors.black87), dialogTheme: DialogThemeData(backgroundColor: Colors.white),
           ),
           child: AlertDialog(
             title: const Text('Error', style: TextStyle(color: Colors.black)),

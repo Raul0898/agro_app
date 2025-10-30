@@ -377,7 +377,7 @@ class _AnalysisSoilPageState extends State<AnalysisSoilPage> {
         if (_secciones.isNotEmpty) ...[
           const SizedBox(height: 8),
           DropdownButtonFormField<SectionOption>(
-            value: _seccionSeleccionada,
+            initialValue: _seccionSeleccionada,
             isExpanded: true, isDense: true, menuMaxHeight: 320,
             decoration: InputDecoration(
               prefixIcon: const Icon(Icons.segment_outlined),
@@ -582,7 +582,7 @@ class _AnalysisSoilPageState extends State<AnalysisSoilPage> {
         ]),
         const SizedBox(height: 8),
         DropdownButtonFormField<String>(
-          value: _archiveTop, isExpanded: true,
+          initialValue: _archiveTop, isExpanded: true,
           decoration: InputDecoration(prefixIcon: const Icon(Icons.folder_open_outlined), hintText: 'Selecciona categoría (Análisis / Reportes)', filled: true, fillColor: Colors.white.withOpacity(0.9), border: cardBorder, contentPadding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12)),
           items: _archiveTopOptions.map((o) => DropdownMenuItem<String>(
             value: o, child: Row(children: [Icon(o == 'Análisis' ? Icons.science_outlined : Icons.assignment_outlined), const SizedBox(width: 8), Expanded(child: Text(o, maxLines: 1, overflow: TextOverflow.ellipsis))]),
@@ -592,7 +592,7 @@ class _AnalysisSoilPageState extends State<AnalysisSoilPage> {
         if (_archiveTop != null) const SizedBox(height: 10),
         if (_archiveTop != null)
           DropdownButtonFormField<String>(
-            value: _archiveSub, isExpanded: true,
+            initialValue: _archiveSub, isExpanded: true,
             decoration: InputDecoration(prefixIcon: const Icon(Icons.subdirectory_arrow_right), hintText: 'Selecciona el tipo específico', filled: true, fillColor: Colors.white.withOpacity(0.9), border: cardBorder, contentPadding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12)),
             items: subOptions.map((o) => DropdownMenuItem<String>(value: o, child: Text(o))).toList(),
             onChanged: (val) => setState(() => _archiveSub = val),
@@ -652,7 +652,7 @@ class _AnalysisSoilPageState extends State<AnalysisSoilPage> {
       Text(label, style: TextStyle(color: Colors.grey.shade800, fontWeight: FontWeight.w700)),
       const SizedBox(height: 6),
       DropdownButtonFormField<T>(
-        value: value, isExpanded: true,
+        initialValue: value, isExpanded: true,
         decoration: InputDecoration(prefixIcon: Icon(icon), hintText: hint, filled: true, fillColor: Colors.white.withOpacity(0.9), border: cardBorder, contentPadding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12)),
         items: items, onChanged: onChanged,
       ),
@@ -919,7 +919,7 @@ class _ArchiveResultsList extends StatelessWidget {
               final storagePath = data['storagePath'] as String?;
               final caso = data['caso'] as String?;
 
-              Future<String?> _freshUrl() async {
+              Future<String?> freshUrl() async {
                 if (storagePath == null || storagePath.isEmpty) return url;
                 try { return await FirebaseStorage.instance.ref(storagePath).getDownloadURL(); } catch (_) { return url; }
               }
@@ -943,12 +943,12 @@ class _ArchiveResultsList extends StatelessWidget {
                     OutlinedButton.icon(
                       icon: const Icon(Icons.visibility_outlined, size: 18),
                       label: const Text('Vista previa'),
-                      onPressed: () async { final u = await _freshUrl(); if (u != null) await _openByUrl(context, u); },
+                      onPressed: () async { final u = await freshUrl(); if (u != null) await _openByUrl(context, u); },
                     ),
                     OutlinedButton.icon(
                       icon: const Icon(Icons.download_outlined, size: 18),
                       label: const Text('Descargar'),
-                      onPressed: () async { final u = await _freshUrl(); if (u != null) await _downloadToDevice(context, u, suggestedName: _safeFileName(nombre)); },
+                      onPressed: () async { final u = await freshUrl(); if (u != null) await _downloadToDevice(context, u, suggestedName: _safeFileName(nombre)); },
                     ),
                     // Eliminar: Firestore + Storage
                     TextButton.icon(

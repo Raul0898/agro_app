@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:ui' show FontFeature;
 
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
@@ -53,9 +52,6 @@ OverlayDisposer showUploadOverlayForStream(
   String? label,
 }) {
   final overlay = Overlay.of(context, rootOverlay: true);
-  if (overlay == null) {
-    return () {};
-  }
 
   final notifier = ValueNotifier<UploadOverlayStatus>(const UploadOverlayStatus());
 
@@ -115,9 +111,6 @@ Future<T> runWithIndeterminateOverlay<T>(
   String? label,
 }) async {
   final overlay = Overlay.of(context, rootOverlay: true);
-  if (overlay == null) {
-    return action();
-  }
 
   final entry = OverlayEntry(
     builder: (_) => _ProgressOverlay(

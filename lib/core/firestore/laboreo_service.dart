@@ -95,7 +95,7 @@ class LaboreoService {
   }) async {
     final collection = _db.collection('resultados_analisis_compactacion');
 
-    Future<QueryDocumentSnapshot<Map<String, dynamic>>?> _query(dynamic seccionValue) async {
+    Future<QueryDocumentSnapshot<Map<String, dynamic>>?> query0(dynamic seccionValue) async {
       final query = await collection
           .where('unidad', isEqualTo: unidadId)
           .where('seccion', isEqualTo: seccionValue)
@@ -106,11 +106,11 @@ class LaboreoService {
       return query.docs.first;
     }
 
-    final byString = await _query(seccionId);
+    final byString = await query0(seccionId);
     if (byString != null) return byString;
     final numeric = int.tryParse(seccionId);
     if (numeric != null) {
-      final byNumber = await _query(numeric);
+      final byNumber = await query0(numeric);
       if (byNumber != null) return byNumber;
     }
     return null;

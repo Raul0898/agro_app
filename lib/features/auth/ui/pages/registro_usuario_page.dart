@@ -1,5 +1,4 @@
 // lib/features/auth/ui/pages/registro_usuario_page.dart
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -259,9 +258,9 @@ class _RegistroUsuarioFormState extends State<_RegistroUsuarioForm> {
           _unidadesDisponibles
             ..clear()
             ..addAll(unidadesCargadas);
-          _unidadesDisponibles.keys.forEach((key) {
+          for (var key in _unidadesDisponibles.keys) {
             _unidadesSeleccionadas[key] = false;
-          });
+          }
         });
       }
     } catch (e) {
@@ -508,7 +507,7 @@ class _RegistroUsuarioFormState extends State<_RegistroUsuarioForm> {
             const SizedBox(height: 24),
             _buildSectionHeader('Estado de la Cuenta', Icons.toggle_on_outlined),
             DropdownButtonFormField<String>(
-              value: _estado,
+              initialValue: _estado,
               items: const [
                 DropdownMenuItem(value: 'activo', child: Text('Activo')),
                 DropdownMenuItem(value: 'inactivo', child: Text('Inactivo'))
@@ -654,7 +653,7 @@ class _RegistroUsuarioFormState extends State<_RegistroUsuarioForm> {
         );
 
         final dropdown = DropdownButtonFormField<PermissionLevel>(
-          value: value,
+          initialValue: value,
           items: const [
             DropdownMenuItem(
               value: PermissionLevel.editar,
@@ -711,7 +710,7 @@ class _RegistroUsuarioFormState extends State<_RegistroUsuarioForm> {
         final groupDropdown = ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 220),
           child: DropdownButtonFormField<PermissionLevel>(
-            value: current,
+            initialValue: current,
             items: const [
               DropdownMenuItem(
                 value: PermissionLevel.editar,

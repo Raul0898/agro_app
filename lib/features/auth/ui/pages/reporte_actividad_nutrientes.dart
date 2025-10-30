@@ -571,7 +571,7 @@ class _ReporteActividadNutrientesPageState extends State<ReporteActividadNutrien
     final bg = pw.MemoryImage(bgData.buffer.asUint8List());
 
     // ------ Encabezado con "icono" + título (naranja corporativo) ------
-    pw.Widget _header(String emoji, String title) => pw.Row(
+    pw.Widget header(String emoji, String title) => pw.Row(
       crossAxisAlignment: pw.CrossAxisAlignment.center,
       children: [
         pw.Container(
@@ -599,7 +599,7 @@ class _ReporteActividadNutrientesPageState extends State<ReporteActividadNutrien
     );
 
     // Párrafos (sin guiones)
-    pw.Widget _lines(List<String> items) => pw.Column(
+    pw.Widget lines(List<String> items) => pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
         for (final t in items)
@@ -612,7 +612,7 @@ class _ReporteActividadNutrientesPageState extends State<ReporteActividadNutrien
     );
 
     // Rejilla imágenes (3x2) que no se salen del área
-    pw.Widget _imagesGrid({
+    pw.Widget imagesGrid({
       required List<Uint8List> images,
       required double height,
     }) {
@@ -702,12 +702,12 @@ class _ReporteActividadNutrientesPageState extends State<ReporteActividadNutrien
                   child: pw.Column(
                     crossAxisAlignment: pw.CrossAxisAlignment.stretch,
                     children: [
-                      _header('📍', '01 DATOS GENERALES'),
+                      header('📍', '01 DATOS GENERALES'),
                       pw.SizedBox(height: 6),
-                      pw.Container(height: hDatos, child: _lines(datosGenerales)),
+                      pw.Container(height: hDatos, child: lines(datosGenerales)),
                       pw.SizedBox(height: gapY),
 
-                      _header('📝', '02 NOMBRE DEL REPORTE'),
+                      header('📝', '02 NOMBRE DEL REPORTE'),
                       pw.SizedBox(height: 6),
                       pw.Container(
                         height: hNombre,
@@ -716,16 +716,16 @@ class _ReporteActividadNutrientesPageState extends State<ReporteActividadNutrien
                       ),
                       pw.SizedBox(height: gapY),
 
-                      _header('💬', '03 COMENTARIOS'),
+                      header('💬', '03 COMENTARIOS'),
                       pw.SizedBox(height: 6),
-                      pw.Container(height: hComentarios, child: _lines(comentarios)),
+                      pw.Container(height: hComentarios, child: lines(comentarios)),
                       pw.SizedBox(height: gapY),
 
-                      _header('⚠️', '04 INCIDENCIAS'),
+                      header('⚠️', '04 INCIDENCIAS'),
                       pw.SizedBox(height: 6),
-                      pw.Container(height: hIncidTxt, child: _lines(incidenciasTxt)),
+                      pw.Container(height: hIncidTxt, child: lines(incidenciasTxt)),
                       pw.SizedBox(height: 6),
-                      _imagesGrid(images: _incidenciasImgs, height: hIncidImgs),
+                      imagesGrid(images: _incidenciasImgs, height: hIncidImgs),
                     ],
                   ),
                 ),
@@ -740,19 +740,19 @@ class _ReporteActividadNutrientesPageState extends State<ReporteActividadNutrien
                   child: pw.Column(
                     crossAxisAlignment: pw.CrossAxisAlignment.stretch,
                     children: [
-                      _header('⛽', '05 RECURSOS UTILIZADOS'),
+                      header('⛽', '05 RECURSOS UTILIZADOS'),
                       pw.SizedBox(height: 6),
-                      pw.Container(height: hRecursos, child: _lines(recursos)),
+                      pw.Container(height: hRecursos, child: lines(recursos)),
                       pw.SizedBox(height: gapY),
 
-                      _header('✅', '06 RECOMENDACIÓN'),
+                      header('✅', '06 RECOMENDACIÓN'),
                       pw.SizedBox(height: 6),
-                      pw.Container(height: hRecomend, child: _lines(recomendaciones)),
+                      pw.Container(height: hRecomend, child: lines(recomendaciones)),
                       pw.SizedBox(height: gapY),
 
-                      _header('🖼️', '07 IMÁGENES DEL REPORTE'),
+                      header('🖼️', '07 IMÁGENES DEL REPORTE'),
                       pw.SizedBox(height: 6),
-                      _imagesGrid(images: _reporteImgs, height: hImgsRep),
+                      imagesGrid(images: _reporteImgs, height: hImgsRep),
                     ],
                   ),
                 ),
@@ -877,7 +877,7 @@ class _ReporteActividadNutrientesPageState extends State<ReporteActividadNutrien
       final hasNewRep = _reportePaths.isNotEmpty;
 
       // Si NO hay nuevas, usa las previas también para el PDF
-      Future<void> _loadOldBytesIfNeeded() async {
+      Future<void> loadOldBytesIfNeeded() async {
         Future<void> loadList(
             List<String> paths, List<Uint8List> into) async {
           for (final p in paths) {
@@ -905,7 +905,7 @@ class _ReporteActividadNutrientesPageState extends State<ReporteActividadNutrien
         }
       }
 
-      await _loadOldBytesIfNeeded();
+      await loadOldBytesIfNeeded();
 
       // Borrar del storage solo si subiste nuevas
       if (hasNewInc) await _deletePathsSafe(oldIncPaths);

@@ -1,7 +1,5 @@
 // lib/widgets/mini_icon_rail_scaffold.dart
-import 'dart:ui';
 import 'package:flutter/material.dart';
-import './user_actions_menu.dart';
 
 enum AppBlock { produccion, calidad, servicios }
 

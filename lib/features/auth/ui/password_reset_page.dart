@@ -67,8 +67,9 @@ class _PasswordResetPageState extends State<PasswordResetPage> {
       Navigator.of(context).pop(); // regresar al login
     } on FirebaseAuthException catch (e) {
       String msg = 'Ocurrió un error';
-      if (e.code == 'user-not-found') msg = 'Este correo no está registrado.';
-      else if (e.code == 'invalid-email') msg = 'Correo no válido.';
+      if (e.code == 'user-not-found') {
+        msg = 'Este correo no está registrado.';
+      } else if (e.code == 'invalid-email') msg = 'Correo no válido.';
       else if (e.code == 'missing-email') msg = 'Falta el correo.';
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));

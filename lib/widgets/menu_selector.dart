@@ -89,7 +89,7 @@ class _MenuSelectorState extends State<MenuSelector> {
             mainAxisSize: MainAxisSize.min,
             children: [
               DropdownButtonFormField<String>(
-                value: selectedMenuId,
+                initialValue: selectedMenuId,
                 items: _menus
                     .map((m) =>
                     DropdownMenuItem(value: m.id, child: Text(m.title)))

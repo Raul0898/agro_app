@@ -82,7 +82,7 @@ class _FieldsPageState extends State<FieldsPage> {
             onPressed: () async {
               if (name.text.trim().isEmpty) return;
               if (isEdit) {
-                await repo.update(id: existing!['id'], name: name.text.trim(), crop: crop.text.trim().isEmpty ? null : crop.text.trim());
+                await repo.update(id: existing['id'], name: name.text.trim(), crop: crop.text.trim().isEmpty ? null : crop.text.trim());
               } else {
                 await repo.add(name: name.text.trim(), crop: crop.text.trim().isEmpty ? null : crop.text.trim());
               }

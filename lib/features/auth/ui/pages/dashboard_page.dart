@@ -89,7 +89,7 @@ class _BaseCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: cs.surface, // Blanco puro
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: cs.surfaceVariant), // Gris claro
+        border: Border.all(color: cs.surfaceContainerHighest), // Gris claro
       ),
       padding: const EdgeInsets.all(18),
       child: child,

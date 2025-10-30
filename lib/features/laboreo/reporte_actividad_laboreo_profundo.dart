@@ -23,7 +23,7 @@ class _ReporteActividadLaboreoProfundoPageState
   final _service = LaboreoService();
 
   bool _saving = false;
-  DateTime _fecha = DateTime.now();
+  final DateTime _fecha = DateTime.now();
 
   @override
   void dispose() {

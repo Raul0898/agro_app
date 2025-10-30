@@ -369,7 +369,7 @@ class _DropdownCard<T> extends StatelessWidget {
                 )),
             const SizedBox(height: 6),
             DropdownButtonFormField<T>(
-              value: value,
+              initialValue: value,
               decoration: InputDecoration(
                 hintText: hint,
                 filled: true,
@@ -392,7 +392,7 @@ class _DropdownCard<T> extends StatelessWidget {
 
 class _ImageViewerPage extends StatelessWidget {
   final String assetPath;
-  const _ImageViewerPage({super.key, required this.assetPath});
+  const _ImageViewerPage({required this.assetPath});
 
   @override
   Widget build(BuildContext context) {
@@ -416,7 +416,7 @@ class _ImageViewerPage extends StatelessWidget {
 
 class _PdfViewerPage extends StatelessWidget {
   final String filePath; // ← ABRIMOS DESDE ARCHIVO TEMPORAL
-  const _PdfViewerPage({super.key, required this.filePath});
+  const _PdfViewerPage({required this.filePath});
 
   @override
   Widget build(BuildContext context) {

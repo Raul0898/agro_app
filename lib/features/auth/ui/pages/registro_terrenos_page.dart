@@ -69,7 +69,9 @@ class _RegistroTerrenosBodyState extends State<RegistroTerrenosBody> {
   void _onChangeAtLevel(int levelIndex, String? selectedPath) {
     setState(() {
       _levels[levelIndex] = _levels[levelIndex].copyWith(selectedPath: selectedPath);
-      while (_levels.length > levelIndex + 1) _levels.removeLast();
+      while (_levels.length > levelIndex + 1) {
+        _levels.removeLast();
+      }
       _selectedFilePath = null;
       if (selectedPath == null || selectedPath.isEmpty) return;
       final entries = _childrenOfPrefix(_levels[levelIndex].prefix);
@@ -311,7 +313,7 @@ class _DropdownCard<T> extends StatelessWidget {
             Text(label, style: theme.textTheme.labelLarge?.copyWith(color: Colors.black87, fontWeight: FontWeight.w700)),
             const SizedBox(height: 6),
             DropdownButtonFormField<T>(
-              value: value,
+              initialValue: value,
               decoration: InputDecoration(
                 hintText: hint,
                 filled: true,
@@ -332,7 +334,7 @@ class _DropdownCard<T> extends StatelessWidget {
 
 class _ImageViewerPage extends StatelessWidget {
   final String assetPath;
-  const _ImageViewerPage({super.key, required this.assetPath});
+  const _ImageViewerPage({required this.assetPath});
 
   @override
   Widget build(BuildContext context) {
@@ -356,7 +358,7 @@ class _ImageViewerPage extends StatelessWidget {
 
 class _PdfViewerPage extends StatelessWidget {
   final String filePath;
-  const _PdfViewerPage({super.key, required this.filePath});
+  const _PdfViewerPage({required this.filePath});
 
   @override
   Widget build(BuildContext context) {

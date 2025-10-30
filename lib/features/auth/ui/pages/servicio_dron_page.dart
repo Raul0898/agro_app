@@ -260,7 +260,7 @@ class _ServicioDronPageState extends State<ServicioDronPage> {
 
                       // Objetivo
                       DropdownButtonFormField<String>(
-                        value: _objetivo,
+                        initialValue: _objetivo,
                         decoration: const InputDecoration(
                           labelText: 'Objetivo del vuelo *',
                           border: OutlineInputBorder(),
