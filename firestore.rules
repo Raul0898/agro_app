@@ -1,0 +1,40 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner() {
+      return isSignedIn() && request.auth.uid == resource.data.uid;
+    }
+
+    function hasRequiredRepoFields() {
+      return request.resource != null
+        && request.resource.data.keys().hasAll(['uid', 'unidad', 'fecha'])
+        && request.resource.data.uid is string
+        && request.resource.data.unidad is string
+        && request.resource.data.fecha is timestamp;
+    }
+
+    function canCreateRepoDoc() {
+      return isSignedIn()
+        && request.resource.data.uid == request.auth.uid
+        && hasRequiredRepoFields();
+    }
+
+    function canMutateRepoDoc() {
+      return isOwner()
+        && ((request.resource == null && request.method == 'delete')
+          || (request.resource != null
+            && request.resource.data.uid == resource.data.uid
+            && hasRequiredRepoFields()));
+    }
+
+    match /actividades_laboreo_profundo/{docId} {
+      allow read: if isSignedIn() && isOwner();
+      allow create: if canCreateRepoDoc();
+      allow update, delete: if canMutateRepoDoc();
+    }
+  }
+}
