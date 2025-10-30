@@ -1,3 +1,6 @@
+import java.io.File
+import org.gradle.api.tasks.compile.JavaCompile
+
 plugins {
     id("com.android.application")
     id("kotlin-android")
@@ -47,4 +50,29 @@ java {
 
 flutter {
     source = "../.."
+}
+
+tasks.withType<JavaCompile>().configureEach {
+    val buildDirPath = layout.buildDirectory.get().asFile.toPath()
+    val flutterGeneratedMarker = "${File.separator}io${File.separator}flutter${File.separator}plugins${File.separator}GeneratedPluginRegistrant"
+
+    doFirst {
+        val sourceFiles = source.files
+        // The Flutter tooling generates Java registrant stubs that may invoke deprecated
+        // plugin APIs. Keep lint checks active for our own sources while silencing the
+        // warning noise from those generated files (which we cannot edit).
+        val onlyGeneratedSources = sourceFiles.isNotEmpty() && sourceFiles.all { file ->
+            val normalizedPath = file.toPath().toAbsolutePath().normalize()
+            normalizedPath.startsWith(buildDirPath) ||
+                normalizedPath.toString().contains(flutterGeneratedMarker)
+        }
+
+        options.compilerArgs.removeAll(listOf("-Xlint:deprecation", "-Xlint:unchecked", "-Xlint:-deprecation"))
+
+        if (onlyGeneratedSources) {
+            options.compilerArgs.add("-Xlint:-deprecation")
+        } else {
+            options.compilerArgs.addAll(listOf("-Xlint:deprecation", "-Xlint:unchecked"))
+        }
+    }
 }
