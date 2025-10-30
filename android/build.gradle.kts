@@ -1,4 +1,5 @@
 import org.gradle.api.tasks.Delete
+import org.gradle.api.tasks.compile.JavaCompile
 
 plugins {
     java
@@ -23,6 +24,16 @@ subprojects {
 }
 subprojects {
     project.evaluationDependsOn(":app")
+}
+
+subprojects {
+    afterEvaluate {
+        if (name != "app") {
+            tasks.withType<JavaCompile>().configureEach {
+                options.compilerArgs.removeAll(listOf("-Xlint:-options"))
+            }
+        }
+    }
 }
 
 tasks.named<Delete>("clean") {
