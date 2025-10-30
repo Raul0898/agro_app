@@ -27,15 +27,13 @@ subprojects {
 }
 
 subprojects {
-    afterEvaluate {
-        if (name != "app") {
-            tasks.withType<JavaCompile>().configureEach {
-                options.compilerArgs.removeAll(listOf("-Xlint:-options"))
-            }
+    if (name != "app") {
+        tasks.withType<JavaCompile>().configureEach {
+            options.compilerArgs.removeAll(listOf("-Xlint:-options"))
         }
     }
 }
 
-tasks.named<Delete>("clean") {
+tasks.named<Delete>("clean").configure {
     delete(rootProject.layout.buildDirectory)
 }
