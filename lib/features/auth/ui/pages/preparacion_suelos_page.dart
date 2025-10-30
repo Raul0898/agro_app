@@ -155,6 +155,7 @@ class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
     try {
       final unidad = await _service.unidadActualDelUsuario(uid);
       if (unidad == null || unidad.trim().isEmpty) {
+        if (!mounted) return;
         setState(() {
           _loading = false;
           _error = 'No se encontró una unidad asignada al perfil.';
@@ -183,6 +184,7 @@ class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
           .map(_ActividadSuperficialState.fromSnapshot)
           .toList();
 
+      if (!mounted) return;
       setState(() {
         _uid = uid;
         _unidadId = unidad;
@@ -193,6 +195,7 @@ class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
         _loading = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _loading = false;
         _error = 'Error al cargar los datos: $e';
@@ -566,6 +569,7 @@ class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
         fuente: fuente,
       );
       final snap = await ref.get();
+      if (!mounted) return;
       setState(() {
         _decision = _DecisionProfundoState.fromSnapshot(snap);
       });
@@ -605,6 +609,7 @@ class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
       fuente: fuente,
     );
     final snap = await ref.get();
+    if (!mounted) return null;
     setState(() {
       _decision = _DecisionProfundoState.fromSnapshot(snap);
       _showDecisionForm = false;
@@ -617,6 +622,7 @@ class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
     setState(() => _savingDecision = true);
     try {
       final docId = await _ensureDecisionDoc(decision: 'realizar', fuente: fuente);
+      if (!mounted) return;
       setState(() => _savingDecision = false);
       if (docId == null) return;
       final result = await Navigator.of(context).pushNamed<bool>(
@@ -632,7 +638,9 @@ class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
         await _refreshDecision();
       }
     } catch (e) {
-      setState(() => _savingDecision = false);
+      if (mounted) {
+        setState(() => _savingDecision = false);
+      }
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('No se pudo abrir el reporte: $e')),
@@ -644,6 +652,7 @@ class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
     if (_uid == null || _unidadId == null) return;
     final snap =
         await _service.decisionProfundoDoc(uid: _uid!, unidadId: _unidadId!);
+    if (!mounted) return;
     setState(() {
       _decision = snap == null ? null : _DecisionProfundoState.fromSnapshot(snap);
       _showDecisionForm = _decision?.decision == null;
@@ -690,6 +699,7 @@ class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
       uid: _uid!,
       unidadId: _unidadId!,
     );
+    if (!mounted) return;
     setState(() {
       _superficiales = docs.map(_ActividadSuperficialState.fromSnapshot).toList();
     });

@@ -67,6 +67,15 @@
         {"fieldPath": "unidad", "order": "ASCENDING"},
         {"fieldPath": "fecha", "order": "DESCENDING"}
       ]
+    },
+    {
+      "collectionGroup": "actividades_laboreo_profundo",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {"fieldPath": "uid", "order": "ASCENDING"},
+        {"fieldPath": "unidad", "order": "ASCENDING"},
+        {"fieldPath": "updatedAt", "order": "DESCENDING"}
+      ]
     }
   ],
   "fieldOverrides": []
