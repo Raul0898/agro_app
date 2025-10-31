@@ -4,8 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import 'package:agro_app/core/firestore/laboreo_service.dart';
-import 'package:agro_app/core/router/app_routes.dart';
+import 'reporte_actividad_laboreo_profundo.dart';
+import 'reporte_actividad_laboreo_superficial.dart';
 
 class PreparacionSuelosPage extends StatefulWidget {
   const PreparacionSuelosPage({super.key});
@@ -14,53 +14,57 @@ class PreparacionSuelosPage extends StatefulWidget {
   State<PreparacionSuelosPage> createState() => _PreparacionSuelosPageState();
 }
 
-enum _CasoGlobal { verde, amarillo, rojo, desconocido }
+enum _EstadoColor { verde, amarillo, rojo, desconocido }
 
-class _SeccionAnalisis {
-  const _SeccionAnalisis({
-    required this.id,
+class _SeccionInfo {
+  const _SeccionInfo({required this.id, required this.label});
+
+  final String id;
+  final String label;
+}
+
+class _SeccionResultado {
+  const _SeccionResultado({
+    required this.info,
+    this.doc,
+    required this.color,
+    required this.texto,
     this.nombre,
     this.fecha,
-    this.recomendacionTexto,
-    this.recomendacionColor,
     this.url,
   });
 
-  final String id;
+  final _SeccionInfo info;
+  final DocumentSnapshot<Map<String, dynamic>>? doc;
+  final _EstadoColor color;
+  final String texto;
   final String? nombre;
   final DateTime? fecha;
-  final String? recomendacionTexto;
-  final String? recomendacionColor;
   final String? url;
 
-  bool get tieneDocumento => nombre != null || fecha != null || recomendacionTexto != null;
-}
-
-bool _isWithinSixMonths(DateTime? date) {
-  if (date == null) return false;
-  final now = DateTime.now();
-  final difference = now.difference(date).inDays;
-  return difference <= 180;
+  bool get tieneDocumento => doc != null;
 }
 
 class _DecisionProfundoState {
   const _DecisionProfundoState({
     required this.docId,
-    this.decision,
-    this.fuente,
-    this.ultimoReporteAt,
+    required this.decision,
+    required this.fuente,
+    this.createdAt,
     this.updatedAt,
+    this.reporteEmitidoAt,
   });
 
   final String docId;
   final String? decision;
   final String? fuente;
-  final DateTime? ultimoReporteAt;
+  final DateTime? createdAt;
   final DateTime? updatedAt;
+  final DateTime? reporteEmitidoAt;
 
-  bool get reporteVigente => _isWithinSixMonths(ultimoReporteAt);
+  bool get reporteVigente => _isWithinSixMonths(reporteEmitidoAt);
 
-  static _DecisionProfundoState fromSnapshot(
+  factory _DecisionProfundoState.fromSnapshot(
     DocumentSnapshot<Map<String, dynamic>> snap,
   ) {
     final data = snap.data() ?? <String, dynamic>{};
@@ -68,76 +72,89 @@ class _DecisionProfundoState {
       docId: snap.id,
       decision: (data['decision'] as String?)?.trim(),
       fuente: (data['fuente'] as String?)?.trim(),
-      ultimoReporteAt: (data['ultimoReporteAt'] as Timestamp?)?.toDate(),
-      updatedAt: (data['updatedAt'] as Timestamp?)?.toDate(),
-    );
-  }
-}
-
-class _ActividadSuperficialState {
-  const _ActividadSuperficialState({
-    required this.docId,
-    required this.actividades,
-    this.createdAt,
-    this.reporteEmitidoAt,
-  });
-
-  final String docId;
-  final List<String> actividades;
-  final DateTime? createdAt;
-  final DateTime? reporteEmitidoAt;
-
-  bool get reporteVigente => _isWithinSixMonths(reporteEmitidoAt);
-
-  static _ActividadSuperficialState fromSnapshot(
-    QueryDocumentSnapshot<Map<String, dynamic>> snap,
-  ) {
-    final data = snap.data();
-    final actividades = (data['actividades'] as List?)
-            ?.whereType<String>()
-            .map((e) => e.trim())
-            .where((e) => e.isNotEmpty)
-            .toList() ??
-        <String>[];
-    return _ActividadSuperficialState(
-      docId: snap.id,
-      actividades: actividades,
       createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
+      updatedAt: (data['updatedAt'] as Timestamp?)?.toDate(),
       reporteEmitidoAt: (data['reporteEmitidoAt'] as Timestamp?)?.toDate(),
     );
   }
 }
 
-class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
-  final LaboreoService _service = LaboreoService();
+class _ActividadSuperficialRegistro {
+  const _ActividadSuperficialRegistro({
+    required this.docId,
+    required this.seleccion,
+    this.createdAt,
+    this.updatedAt,
+    this.reporteEmitidoAt,
+    this.done = false,
+  });
 
+  final String docId;
+  final String seleccion;
+  final DateTime? createdAt;
+  final DateTime? updatedAt;
+  final DateTime? reporteEmitidoAt;
+  final bool done;
+
+  bool get reporteVigente => done && _isWithinSixMonths(reporteEmitidoAt);
+
+  factory _ActividadSuperficialRegistro.fromSnapshot(
+    QueryDocumentSnapshot<Map<String, dynamic>> snap,
+  ) {
+    final data = snap.data();
+    return _ActividadSuperficialRegistro(
+      docId: snap.id,
+      seleccion: (data['seleccion'] as String? ?? 'rastra').toLowerCase(),
+      createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
+      updatedAt: (data['updatedAt'] as Timestamp?)?.toDate(),
+      reporteEmitidoAt: (data['reporteEmitidoAt'] as Timestamp?)?.toDate(),
+      done: data['done'] == true,
+    );
+  }
+
+  factory _ActividadSuperficialRegistro.fromDocument(
+    DocumentSnapshot<Map<String, dynamic>> snap,
+  ) {
+    final data = snap.data() ?? <String, dynamic>{};
+    return _ActividadSuperficialRegistro(
+      docId: snap.id,
+      seleccion: (data['seleccion'] as String? ?? 'rastra').toLowerCase(),
+      createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
+      updatedAt: (data['updatedAt'] as Timestamp?)?.toDate(),
+      reporteEmitidoAt: (data['reporteEmitidoAt'] as Timestamp?)?.toDate(),
+      done: data['done'] == true,
+    );
+  }
+}
+
+bool _isWithinSixMonths(DateTime? date) {
+  if (date == null) return false;
+  final now = DateTime.now();
+  return now.difference(date).inDays <= 180;
+}
+
+class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
   bool _loading = true;
   String? _error;
   String? _uid;
   String? _unidadId;
 
-  List<_SeccionAnalisis> _secciones = const [];
+  List<_SeccionInfo> _secciones = const [];
+  final Map<String, _SeccionResultado> _resultados = {};
   _DecisionProfundoState? _decision;
-  bool _showDecisionForm = false;
-  bool _savingDecision = false;
+  bool _guardandoDecision = false;
 
-  List<_ActividadSuperficialState> _superficiales = const [];
-  bool _addingSuperficial = false;
-  String _superficialOption = 'Rastreo';
-
-  static const List<String> _superficialOptions = <String>[
-    'Rastreo',
-    'Desterronador',
-    'Ambos',
-  ];
+  List<_ActividadSuperficialRegistro> _superficiales = const [];
+  bool _agregandoSuperficial = false;
+  String _seleccionSuperficial = 'rastra';
 
   @override
   void initState() {
     super.initState();
-    _initialize();
+    _cargarTodo();
   }
 
-  Future<void> _initialize() async {
+  Future<void> _cargarTodo() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) {
       setState(() {
@@ -153,44 +170,25 @@ class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
     });
 
     try {
-      final unidad = await _service.unidadActualDelUsuario(uid);
-      if (unidad == null || unidad.trim().isEmpty) {
-        if (!mounted) return;
-        setState(() {
-          _loading = false;
-          _error = 'No se encontró una unidad asignada al perfil.';
-        });
-        return;
+      final unidad = await _resolverUnidad(uid);
+      final secciones = await _resolverSecciones(unidad);
+      final resultados = <String, _SeccionResultado>{};
+      for (final seccion in secciones) {
+        final resultado = await _cargarResultado(unidad, seccion);
+        resultados[seccion.id] = resultado;
       }
-
-      final seccionesIds = await _service.seccionesDeUnidad(unidad);
-      final secciones = <_SeccionAnalisis>[];
-      for (final seccionId in seccionesIds) {
-        final snap = await _service.ultimoCompactacionPorSeccion(
-          unidadId: unidad,
-          seccionId: seccionId,
-        );
-        secciones.add(_mapSeccion(seccionId, snap));
-      }
-
-      final decisionSnap =
-          await _service.decisionProfundoDoc(uid: uid, unidadId: unidad);
-      final decision =
-          decisionSnap == null ? null : _DecisionProfundoState.fromSnapshot(decisionSnap);
-
-      final superficialesDocs =
-          await _service.actividadesSuperficiales(uid: uid, unidadId: unidad);
-      final superficiales = superficialesDocs
-          .map(_ActividadSuperficialState.fromSnapshot)
-          .toList();
+      final decision = await _cargarDecision(uid, unidad);
+      final superficiales = await _cargarActividades(uid, unidad);
 
       if (!mounted) return;
       setState(() {
         _uid = uid;
         _unidadId = unidad;
         _secciones = secciones;
+        _resultados
+          ..clear()
+          ..addAll(resultados);
         _decision = decision;
-        _showDecisionForm = decision?.decision == null;
         _superficiales = superficiales;
         _loading = false;
       });
@@ -203,46 +201,180 @@ class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
     }
   }
 
-  _SeccionAnalisis _mapSeccion(
-    String seccionId,
-    QueryDocumentSnapshot<Map<String, dynamic>>? snap,
-  ) {
-    if (snap == null) {
-      return _SeccionAnalisis(id: seccionId);
+  Future<String> _resolverUnidad(String uid) async {
+    final userDoc =
+        await FirebaseFirestore.instance.collection('users').doc(uid).get();
+    final data = userDoc.data() ?? <String, dynamic>{};
+    final unidad = (data['unidad'] as String?) ??
+        (data['unidades'] is List && (data['unidades'] as List).isNotEmpty
+            ? (data['unidades'] as List).first as String?
+            : null);
+    if (unidad == null || unidad.trim().isEmpty) {
+      throw Exception('No se encontró una unidad asignada al perfil.');
     }
-    final data = snap.data();
+    return unidad.trim();
+  }
+
+  Future<List<_SeccionInfo>> _resolverSecciones(String unidad) async {
+    final doc = await FirebaseFirestore.instance
+        .collection('unidades_catalog')
+        .doc(unidad)
+        .get();
+    final data = doc.data() ?? <String, dynamic>{};
+
+    if (data['secciones'] is List) {
+      final list = (data['secciones'] as List)
+          .whereType<dynamic>()
+          .map((e) => e.toString().trim())
+          .where((e) => e.isNotEmpty)
+          .toList();
+      if (list.isNotEmpty) {
+        return list
+            .map((value) => _SeccionInfo(
+                  id: value,
+                  label: value.toLowerCase().startsWith('sección')
+                      ? value
+                      : 'Sección $value',
+                ))
+            .toList();
+      }
+    }
+
+    final count = data['seccionesCount'];
+    if (count is int && count > 0) {
+      return List<_SeccionInfo>.generate(
+        count,
+        (index) => _SeccionInfo(
+          id: '${index + 1}',
+          label: 'Sección ${index + 1}',
+        ),
+      );
+    }
+
+    return const <_SeccionInfo>[
+      _SeccionInfo(id: 'unica', label: 'Sección Única'),
+    ];
+  }
+
+  Future<_SeccionResultado> _cargarResultado(
+    String unidad,
+    _SeccionInfo seccion,
+  ) async {
+    Query<Map<String, dynamic>> query = FirebaseFirestore.instance
+        .collection('resultados_analisis_compactacion')
+        .where('unidad', isEqualTo: unidad)
+        .where('seccion', isEqualTo: seccion.id)
+        .orderBy('updatedAt', descending: true)
+        .limit(1);
+
+    QuerySnapshot<Map<String, dynamic>> snap;
+    try {
+      snap = await query.get();
+    } on FirebaseException catch (e) {
+      if (e.code == 'failed-precondition') {
+        snap = await FirebaseFirestore.instance
+            .collection('resultados_analisis_compactacion')
+            .where('unidad', isEqualTo: unidad)
+            .where('seccion', isEqualTo: seccion.id)
+            .limit(1)
+            .get();
+      } else {
+        rethrow;
+      }
+    }
+
+    if (snap.docs.isEmpty) {
+      final asInt = int.tryParse(seccion.id);
+      if (asInt != null) {
+        Query<Map<String, dynamic>> altQuery = FirebaseFirestore.instance
+            .collection('resultados_analisis_compactacion')
+            .where('unidad', isEqualTo: unidad)
+            .where('seccion', isEqualTo: asInt)
+            .orderBy('updatedAt', descending: true)
+            .limit(1);
+        try {
+          snap = await altQuery.get();
+        } on FirebaseException catch (e) {
+          if (e.code == 'failed-precondition') {
+            snap = await FirebaseFirestore.instance
+                .collection('resultados_analisis_compactacion')
+                .where('unidad', isEqualTo: unidad)
+                .where('seccion', isEqualTo: asInt)
+                .limit(1)
+                .get();
+          } else {
+            rethrow;
+          }
+        }
+      }
+    }
+
+    DocumentSnapshot<Map<String, dynamic>>? doc;
+    if (snap.docs.isNotEmpty) {
+      doc = snap.docs.first;
+    }
+
+    final data = doc?.data() ?? <String, dynamic>{};
+    final recomendacion =
+        (data['recomendacion'] as Map<String, dynamic>?) ?? const {};
+    final colorRaw = (recomendacion['color'] as String?)?.toLowerCase().trim();
+    final texto = (recomendacion['texto'] as String?)?.trim() ??
+        'Sin recomendación disponible';
     final nombre = (data['nombreArchivo'] as String?) ??
         (data['nombre'] as String?) ??
         (data['titulo'] as String?);
-    final url = (data['url'] as String?) ?? (data['downloadUrl'] as String?);
-    return _SeccionAnalisis(
-      id: seccionId,
+    final url = (data['urlPdf'] as String?) ??
+        (data['url'] as String?) ??
+        (data['downloadUrl'] as String?);
+    final fecha = (data['updatedAt'] as Timestamp?)?.toDate() ??
+        (data['createdAt'] as Timestamp?)?.toDate();
+
+    return _SeccionResultado(
+      info: seccion,
+      doc: doc,
+      color: _estadoDesdeColor(colorRaw),
+      texto: texto.isEmpty ? 'Sin recomendación disponible' : texto,
       nombre: nombre,
-      fecha: (data['fecha'] as Timestamp?)?.toDate(),
-      recomendacionTexto: data['recomendacion_texto'] as String?,
-      recomendacionColor: data['recomendacion_color'] as String?,
+      fecha: fecha,
       url: url,
     );
   }
 
-  _CasoGlobal get _estadoGlobal {
-    if (_secciones.isEmpty) return _CasoGlobal.desconocido;
-    bool hasRojo = false;
-    bool hasAmarillo = false;
-    bool anyConocido = false;
-    for (final seccion in _secciones) {
-      final color = _normalizaColor(seccion.recomendacionColor);
-      if (color == null) continue;
-      anyConocido = true;
-      if (color == 'rojo') return _CasoGlobal.rojo;
-      if (color == 'amarillo') hasAmarillo = true;
-    }
-    if (!anyConocido) return _CasoGlobal.desconocido;
-    if (hasAmarillo) return _CasoGlobal.amarillo;
-    return _CasoGlobal.verde;
+  Future<_DecisionProfundoState?> _cargarDecision(
+    String uid,
+    String unidad,
+  ) async {
+    final snap = await FirebaseFirestore.instance
+        .collection('decisiones_laboreo_profundo')
+        .where('uid', isEqualTo: uid)
+        .where('unidad', isEqualTo: unidad)
+        .orderBy('createdAt', descending: true)
+        .limit(1)
+        .get();
+    if (snap.docs.isEmpty) return null;
+    return _DecisionProfundoState.fromSnapshot(snap.docs.first);
   }
 
-  bool get _palomitaProfundo => _decision?.reporteVigente ?? false;
+  Future<List<_ActividadSuperficialRegistro>> _cargarActividades(
+    String uid,
+    String unidad,
+  ) async {
+    final snap = await FirebaseFirestore.instance
+        .collection('actividades_laboreo_superficial')
+        .where('uid', isEqualTo: uid)
+        .where('unidad', isEqualTo: unidad)
+        .orderBy('createdAt', descending: true)
+        .get();
+    return snap.docs
+        .map(_ActividadSuperficialRegistro.fromSnapshot)
+        .toList(growable: false);
+  }
+
+  bool get _hayRojo =>
+      _resultados.values.any((resultado) => resultado.color == _EstadoColor.rojo);
+
+  bool get _hayAmarillo => !_hayRojo &&
+      _resultados.values.any((resultado) => resultado.color == _EstadoColor.amarillo);
 
   @override
   Widget build(BuildContext context) {
@@ -255,128 +387,61 @@ class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
           padding: const EdgeInsets.all(16),
           child: Text(
             _error!,
-            style: const TextStyle(fontWeight: FontWeight.w600),
             textAlign: TextAlign.center,
+            style: const TextStyle(fontWeight: FontWeight.w600),
           ),
         ),
       );
     }
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _buildLaboreoProfundo(context),
-          const SizedBox(height: 24),
-          Divider(color: Colors.black.withOpacity(0.1)),
-          const SizedBox(height: 24),
-          _buildLaboreoSuperficial(context),
-        ],
+    return RefreshIndicator(
+      onRefresh: _cargarTodo,
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildLaboreoProfundo(context),
+            const SizedBox(height: 24),
+            Divider(color: Colors.black.withOpacity(0.08)),
+            const SizedBox(height: 24),
+            _buildLaboreoSuperficial(context),
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildLaboreoProfundo(BuildContext context) {
     final theme = Theme.of(context);
-    final children = <Widget>[
-      Text('Laboreo Profundo', style: theme.textTheme.titleLarge),
-      const SizedBox(height: 12),
-      if (_secciones.isEmpty)
-        _placeholderCard('No hay secciones registradas para la unidad.'),
-      for (final seccion in _secciones) _seccionCard(context, seccion),
-    ];
-
-    if (_palomitaProfundo && _decision?.ultimoReporteAt != null) {
-      children.add(const SizedBox(height: 12));
-      children.add(_palomitaRow(
-        'Reporte de actividad vigente',
-        _decision!.ultimoReporteAt!,
-      ));
-    }
-
-    children.add(const SizedBox(height: 16));
-
-    switch (_estadoGlobal) {
-      case _CasoGlobal.verde:
-        children.add(
-          _infoChip(
-            icon: Icons.verified,
-            color: Colors.green.shade600,
-            text: 'Todas las secciones están en verde. No se requiere laboreo profundo.',
-          ),
-        );
-        break;
-      case _CasoGlobal.amarillo:
-        children.addAll(_bloqueAmarillo());
-        break;
-      case _CasoGlobal.rojo:
-        children.addAll(_bloqueRojo());
-        break;
-      case _CasoGlobal.desconocido:
-        children.add(_placeholderCard(
-            'No se encontraron recomendaciones recientes para las secciones.'));
-        break;
-    }
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
-      children: children,
+      children: [
+        Text('Laboreo Profundo', style: theme.textTheme.titleLarge),
+        const SizedBox(height: 12),
+        if (_secciones.isEmpty)
+          _placeholderCard('No hay secciones registradas para la unidad.'),
+        for (final seccion in _secciones)
+          _seccionCard(_resultados[seccion.id] ?? _SeccionResultado(
+            info: seccion,
+            color: _EstadoColor.desconocido,
+            texto: 'Sin información disponible',
+          )),
+        const SizedBox(height: 16),
+        if (_hayRojo) _bloqueRojo(),
+        if (!_hayRojo && _hayAmarillo) _bloqueAmarillo(),
+      ],
     );
   }
 
-  Widget _buildLaboreoSuperficial(BuildContext context) {
+  Widget _seccionCard(_SeccionResultado resultado) {
     final theme = Theme.of(context);
-    final children = <Widget>[
-      Text('Laboreo Superficial', style: theme.textTheme.titleLarge),
-      const SizedBox(height: 12),
-      Text('Selecciona el tipo de laboreo superficial a registrar:',
-          style: theme.textTheme.bodyMedium),
-      const SizedBox(height: 8),
-      DropdownButtonFormField<String>(
-        initialValue: _superficialOption,
-        items: _superficialOptions
-            .map((opt) => DropdownMenuItem<String>(value: opt, child: Text(opt)))
-            .toList(),
-        onChanged: (value) {
-          if (value != null) {
-            setState(() => _superficialOption = value);
-          }
-        },
-      ),
-      const SizedBox(height: 12),
-      _manualPlaceholder(),
-      const SizedBox(height: 12),
-      SizedBox(
-        width: double.infinity,
-        child: OutlinedButton.icon(
-          icon: const Icon(Icons.add_circle_outline),
-          onPressed: _addingSuperficial ? null : _agregarLaboreoSuperficial,
-          label: Text(_addingSuperficial
-              ? 'Agregando…'
-              : 'Agregar Laboreo Superficial'),
-        ),
-      ),
-      const SizedBox(height: 20),
-      if (_superficiales.isEmpty)
-        _placeholderCard('Aún no se han registrado actividades de laboreo superficial.'),
-      for (final registro in _superficiales)
-        _superficialCard(context, registro),
-    ];
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: children,
-    );
-  }
-
-  Widget _seccionCard(BuildContext context, _SeccionAnalisis seccion) {
-    final theme = Theme.of(context);
-    final fecha = seccion.fecha;
-    final fechaFmt =
-        fecha == null ? 'Sin fecha disponible' : DateFormat('dd/MM/yyyy').format(fecha);
-    final color = _normalizaColor(seccion.recomendacionColor);
-    final textoRecomendacion = seccion.recomendacionTexto?.trim();
+    final fecha = resultado.fecha;
+    final fechaTexto = fecha == null
+        ? 'Sin fecha disponible'
+        : DateFormat('dd/MM/yyyy', 'es_MX').format(fecha);
+    final nombre = resultado.nombre ?? 'Documento sin nombre';
 
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 8),
@@ -387,33 +452,31 @@ class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
           children: [
             Row(
               children: [
-                Text('Sección ${seccion.id}', style: theme.textTheme.titleMedium),
+                Text(resultado.info.label, style: theme.textTheme.titleMedium),
                 const Spacer(),
                 Icon(Icons.segment, color: theme.colorScheme.primary),
               ],
             ),
             const SizedBox(height: 8),
-            Text('Fecha: $fechaFmt', style: theme.textTheme.bodySmall),
-            if (seccion.nombre != null) ...[
-              const SizedBox(height: 6),
-              Text(
-                seccion.nombre!,
-                style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+            Text('Fecha: $fechaTexto', style: theme.textTheme.bodySmall),
+            const SizedBox(height: 6),
+            Text(
+              nombre,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                fontWeight: FontWeight.w600,
               ),
-            ],
-            if (color != null && textoRecomendacion != null) ...[
-              const SizedBox(height: 12),
-              _barraRecomendacion(color, textoRecomendacion),
-            ],
+            ),
+            const SizedBox(height: 12),
+            _barraRecomendacion(resultado.color, resultado.texto),
             const SizedBox(height: 12),
             Align(
               alignment: Alignment.centerRight,
-              child: OutlinedButton.icon(
+              child: TextButton.icon(
+                onPressed: resultado.url == null
+                    ? null
+                    : () => _abrirUrl(resultado.url!),
                 icon: const Icon(Icons.visibility_outlined),
                 label: const Text('Vista previa'),
-                onPressed: seccion.url == null
-                    ? null
-                    : () => _abrirUrl(seccion.url!),
               ),
             ),
           ],
@@ -422,94 +485,226 @@ class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
     );
   }
 
-  List<Widget> _bloqueAmarillo() {
-    if (_savingDecision) {
-      return const [Center(child: Padding(padding: EdgeInsets.all(12), child: CircularProgressIndicator()))];
+  Widget _bloqueRojo() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _manualPlaceholder(),
+            const SizedBox(height: 12),
+            _reporteProfundoButton(fuente: 'rojo'),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _bloqueAmarillo() {
+    if (_guardandoDecision) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(12),
+          child: CircularProgressIndicator(),
+        ),
+      );
     }
 
     final decision = _decision?.decision;
-    if (_showDecisionForm || decision == null) {
-      return [
-        Text(
-          'Se detectaron secciones en amarillo. Define la acción a seguir y se guardará para futuras sesiones.',
-          style: Theme.of(context).textTheme.bodyMedium,
-        ),
-        const SizedBox(height: 12),
-        DropdownButtonFormField<String>(
-          initialValue: null,
-          items: const [
-            DropdownMenuItem(value: 'realizar', child: Text('Realizar Laboreo Profundo')),
-            DropdownMenuItem(value: 'no_realizar', child: Text('No realizar (mantener monitoreo)')),
-          ],
-          decoration: const InputDecoration(labelText: 'Decisión'),
-          onChanged: (value) {
-            if (value != null) {
-              _guardarDecision(value, 'amarillo_usuario');
-            }
-          },
-        ),
-      ];
+    if (decision == null) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Se detectaron secciones en amarillo. Selecciona la acción a realizar y se guardará para futuras sesiones.',
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
+          const SizedBox(height: 12),
+          DropdownButtonFormField<String>(
+            value: null,
+            items: const [
+              DropdownMenuItem(
+                value: 'realizar',
+                child: Text('Realizar Laboreo Profundo'),
+              ),
+              DropdownMenuItem(
+                value: 'no_realizar',
+                child: Text('No realizar Laboreo Profundo'),
+              ),
+            ],
+            decoration: const InputDecoration(
+              labelText: 'Decisión',
+              border: OutlineInputBorder(),
+            ),
+            onChanged: (value) {
+              if (value != null) {
+                _guardarDecision(value, 'amarillo');
+              }
+            },
+          ),
+        ],
+      );
     }
 
     if (decision == 'no_realizar') {
-      return [
-        _infoChip(
-          icon: Icons.check_circle_outline,
-          color: Colors.green.shade600,
-          text: 'Actividad registrada como “No realizar”.',
-        ),
-        const SizedBox(height: 8),
-        TextButton.icon(
-          onPressed: () => setState(() => _showDecisionForm = true),
-          icon: const Icon(Icons.edit_note),
-          label: const Text('Tomar otra decisión'),
-        ),
-      ];
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+            decoration: BoxDecoration(
+              color: Colors.green.shade600,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Text(
+              'Actividad registrada',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton(
+              onPressed: _revertirDecision,
+              child: const Text('Tomar otra decisión'),
+            ),
+          ),
+        ],
+      );
     }
 
-    return [
-      _manualPlaceholder(),
-      const SizedBox(height: 12),
-      SizedBox(
-        width: double.infinity,
-        child: ElevatedButton.icon(
-          icon: const Icon(Icons.assignment_outlined),
-          label: const Text('Reporte de Actividad'),
-          onPressed: () => _abrirReporteProfundo('amarillo_usuario'),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _manualPlaceholder(),
+        const SizedBox(height: 12),
+        _reporteProfundoButton(fuente: 'amarillo'),
+        const SizedBox(height: 8),
+        Align(
+          alignment: Alignment.centerRight,
+          child: TextButton(
+            onPressed: _revertirDecision,
+            child: const Text('Tomar otra decisión'),
+          ),
         ),
-      ),
-    ];
+      ],
+    );
   }
 
-  List<Widget> _bloqueRojo() {
-    return [
-      _infoChip(
-        icon: Icons.priority_high,
-        color: Colors.red.shade600,
-        text:
-            'Se detectaron secciones en rojo. Se recomienda realizar laboreo profundo de inmediato.',
-      ),
-      const SizedBox(height: 12),
-      _manualPlaceholder(),
-      const SizedBox(height: 12),
-      SizedBox(
-        width: double.infinity,
-        child: ElevatedButton.icon(
+  Widget _reporteProfundoButton({required String fuente}) {
+    final bool mostrarPalomita = _decision?.reporteVigente ?? false;
+    return Row(
+      children: [
+        FilledButton.icon(
+          onPressed: () => _abrirReporteProfundo(fuente),
           icon: const Icon(Icons.assignment_outlined),
           label: const Text('Reporte de Actividad'),
-          onPressed: () => _abrirReporteProfundo('rojo_auto'),
         ),
-      ),
-    ];
+        if (mostrarPalomita) ...[
+          const SizedBox(width: 8),
+          const Icon(Icons.check_circle, color: Colors.green),
+        ],
+      ],
+    );
   }
 
-  Widget _superficialCard(BuildContext context, _ActividadSuperficialState registro) {
+  Widget _buildLaboreoSuperficial(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Laboreo Superficial', style: theme.textTheme.titleLarge),
+        const SizedBox(height: 12),
+        Text(
+          'Selecciona el tipo de laboreo superficial a registrar:',
+          style: theme.textTheme.bodyMedium,
+        ),
+        const SizedBox(height: 8),
+        DropdownButtonFormField<String>(
+          value: _seleccionSuperficial,
+          items: const [
+            DropdownMenuItem(value: 'rastra', child: Text('Rastreo')),
+            DropdownMenuItem(value: 'desterronador', child: Text('Desterronador')),
+            DropdownMenuItem(
+              value: 'ambos',
+              child: Text('Rastreo y Desterronador'),
+            ),
+          ],
+          onChanged: (value) {
+            if (value != null) {
+              setState(() => _seleccionSuperficial = value);
+            }
+          },
+          decoration: const InputDecoration(
+            border: OutlineInputBorder(),
+            labelText: 'Actividad',
+          ),
+        ),
+        const SizedBox(height: 12),
+        ..._manualesPlaceholder(_seleccionSuperficial),
+        const SizedBox(height: 12),
+        FilledButton.icon(
+          onPressed: () async {
+            final resultado = await Navigator.of(context).push<bool>(
+              MaterialPageRoute(
+                builder: (_) => ReporteActividadLaboreoSuperficialPage(
+                  seleccion: _seleccionSuperficial,
+                ),
+              ),
+            );
+            if (resultado == true && mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Recuerda registrar la actividad desde un bloque guardado.'),
+                ),
+              );
+            }
+          },
+          icon: const Icon(Icons.assignment_outlined),
+          label: const Text('Reporte de Actividad'),
+        ),
+        const SizedBox(height: 12),
+        OutlinedButton.icon(
+          onPressed: _agregandoSuperficial ? null : _agregarBloqueSuperficial,
+          icon: _agregandoSuperficial
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.add_circle_outline),
+          label: Text(
+            _agregandoSuperficial
+                ? 'Agregando…'
+                : 'Agregar Laboreo Superficial',
+          ),
+        ),
+        const SizedBox(height: 20),
+        if (_superficiales.isEmpty)
+          _placeholderCard(
+              'Aún no se han registrado actividades de laboreo superficial.'),
+        for (final registro in _superficiales)
+          _superficialCard(context, registro),
+      ],
+    );
+  }
+
+  Widget _superficialCard(
+    BuildContext context,
+    _ActividadSuperficialRegistro registro,
+  ) {
     final theme = Theme.of(context);
     final fecha = registro.createdAt;
-    final fechaTxt = fecha == null
+    final fechaTexto = fecha == null
         ? 'Fecha no disponible'
         : DateFormat('dd/MM/yyyy HH:mm', 'es_MX').format(fecha);
-    final actividades = registro.actividades.map(_nombreActividad).toList();
+    final seleccionTexto = _nombreSeleccion(registro.seleccion);
 
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 8),
@@ -520,34 +715,29 @@ class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
           children: [
             Row(
               children: [
-                Text('Registro creado el $fechaTxt',
-                    style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
+                Text('Actividad registrada', style: theme.textTheme.titleMedium),
                 const Spacer(),
-                if (registro.reporteVigente && registro.reporteEmitidoAt != null)
-                  _palomitaRow('Reporte vigente', registro.reporteEmitidoAt!),
+                if (registro.reporteVigente)
+                  const Icon(Icons.check_circle, color: Colors.green),
               ],
             ),
+            const SizedBox(height: 8),
+            Text('Tipo: $seleccionTexto', style: theme.textTheme.bodyMedium),
+            const SizedBox(height: 4),
+            Text('Registrado: $fechaTexto', style: theme.textTheme.bodySmall),
             const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: actividades
-                  .map((actividad) => Chip(
-                        avatar: const Icon(Icons.agriculture, size: 18),
-                        label: Text(actividad),
-                      ))
-                  .toList(),
-            ),
-            const SizedBox(height: 12),
-            _manualPlaceholder(),
-            const SizedBox(height: 12),
-            Align(
-              alignment: Alignment.centerRight,
-              child: ElevatedButton.icon(
-                icon: const Icon(Icons.assignment_outlined),
-                label: const Text('Reporte de Actividad'),
-                onPressed: () => _abrirReporteSuperficial(registro),
-              ),
+            Row(
+              children: [
+                FilledButton.icon(
+                  onPressed: () => _abrirReporteSuperficial(registro),
+                  icon: const Icon(Icons.assignment_outlined),
+                  label: const Text('Reporte de Actividad'),
+                ),
+                if (registro.reporteVigente) ...[
+                  const SizedBox(width: 8),
+                  const Icon(Icons.check_circle, color: Colors.green),
+                ],
+              ],
             ),
           ],
         ),
@@ -557,193 +747,239 @@ class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
 
   Future<void> _guardarDecision(String decision, String fuente) async {
     if (_uid == null || _unidadId == null) return;
-    setState(() {
-      _savingDecision = true;
-      _showDecisionForm = false;
-    });
+    setState(() => _guardandoDecision = true);
     try {
-      final ref = await _service.guardarDecisionProfundo(
-        uid: _uid!,
-        unidadId: _unidadId!,
-        decision: decision,
-        fuente: fuente,
+      final ref = FirebaseFirestore.instance
+          .collection('decisiones_laboreo_profundo');
+      late final DocumentReference<Map<String, dynamic>> docRef;
+      if (_decision != null) {
+        docRef = ref.doc(_decision!.docId);
+      } else {
+        docRef = ref.doc();
+      }
+      final data = <String, dynamic>{
+        'uid': _uid!,
+        'unidad': _unidadId!,
+        'decision': decision,
+        'fuente': fuente,
+        'updatedAt': FieldValue.serverTimestamp(),
+        'expiresAt': Timestamp.fromDate(
+          DateTime.now().add(const Duration(days: 180)),
+        ),
+      };
+      if (_decision == null) {
+        data['createdAt'] = FieldValue.serverTimestamp();
+      }
+      await docRef.set(data, SetOptions(merge: true));
+      final snap = await docRef.get();
+      if (!mounted) return;
+      setState(() {
+        _decision = _DecisionProfundoState.fromSnapshot(snap);
+        _guardandoDecision = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _guardandoDecision = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No se pudo guardar la decisión: $e')),
       );
-      final snap = await ref.get();
+    }
+  }
+
+  Future<void> _registrarReporteProfundo(String fuente) async {
+    if (_uid == null || _unidadId == null) return;
+    try {
+      final ref = FirebaseFirestore.instance
+          .collection('decisiones_laboreo_profundo');
+      late final DocumentReference<Map<String, dynamic>> docRef;
+      if (_decision != null) {
+        docRef = ref.doc(_decision!.docId);
+      } else {
+        docRef = ref.doc();
+      }
+      final data = <String, dynamic>{
+        'uid': _uid!,
+        'unidad': _unidadId!,
+        'decision': 'realizar',
+        'fuente': fuente,
+        'reporteEmitidoAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+        'expiresAt': Timestamp.fromDate(
+          DateTime.now().add(const Duration(days: 180)),
+        ),
+      };
+      if (_decision == null) {
+        data['createdAt'] = FieldValue.serverTimestamp();
+      }
+      await docRef.set(data, SetOptions(merge: true));
+      final snap = await docRef.get();
       if (!mounted) return;
       setState(() {
         _decision = _DecisionProfundoState.fromSnapshot(snap);
       });
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Decisión guardada correctamente.')),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('No se pudo guardar la decisión: $e')),
-      );
-      setState(() => _showDecisionForm = true);
-    } finally {
-      if (mounted) {
-        setState(() => _savingDecision = false);
-      }
-    }
-  }
-
-  Future<String?> _ensureDecisionDoc({
-    required String decision,
-    required String fuente,
-  }) async {
-    if (_uid == null || _unidadId == null) return null;
-    if (_decision != null &&
-        _decision!.decision == decision &&
-        (_decision!.fuente ?? '') == fuente &&
-        _decision!.docId.isNotEmpty) {
-      return _decision!.docId;
-    }
-
-    final ref = await _service.guardarDecisionProfundo(
-      uid: _uid!,
-      unidadId: _unidadId!,
-      decision: decision,
-      fuente: fuente,
-    );
-    final snap = await ref.get();
-    if (!mounted) return null;
-    setState(() {
-      _decision = _DecisionProfundoState.fromSnapshot(snap);
-      _showDecisionForm = false;
-    });
-    return _decision?.docId;
-  }
-
-  Future<void> _abrirReporteProfundo(String fuente) async {
-    if (_uid == null || _unidadId == null) return;
-    setState(() => _savingDecision = true);
-    try {
-      final docId = await _ensureDecisionDoc(decision: 'realizar', fuente: fuente);
-      if (!mounted) return;
-      setState(() => _savingDecision = false);
-      if (docId == null) return;
-      final result = await Navigator.of(context).pushNamed<bool>(
-        AppRoutes.reporteLaboreoProfundo,
-        arguments: LaboreoProfundoArgs(
-          uid: _uid!,
-          unidadId: _unidadId!,
-          decisionFuente: fuente,
-          decisionDocId: docId,
-        ),
-      );
-      if (result == true) {
-        await _refreshDecision();
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() => _savingDecision = false);
-      }
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('No se pudo abrir el reporte: $e')),
-      );
-    }
-  }
-
-  Future<void> _refreshDecision() async {
-    if (_uid == null || _unidadId == null) return;
-    final snap =
-        await _service.decisionProfundoDoc(uid: _uid!, unidadId: _unidadId!);
-    if (!mounted) return;
-    setState(() {
-      _decision = snap == null ? null : _DecisionProfundoState.fromSnapshot(snap);
-      _showDecisionForm = _decision?.decision == null;
-    });
-  }
-
-  Future<void> _agregarLaboreoSuperficial() async {
-    if (_uid == null || _unidadId == null) return;
-    final actividades = _mapActividadesDesdeSeleccion(_superficialOption);
-    if (actividades.isEmpty) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Selecciona una actividad válida.')),
-      );
-      return;
-    }
-    setState(() => _addingSuperficial = true);
-    try {
-      await _service.crearSuperficial(
-        uid: _uid!,
-        unidadId: _unidadId!,
-        actividades: actividades,
-      );
-      await _refreshSuperficiales();
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Actividad de laboreo superficial registrada.')),
-      );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('No se pudo registrar la actividad: $e')),
       );
-    } finally {
-      if (mounted) {
-        setState(() => _addingSuperficial = false);
+    }
+  }
+
+  Future<void> _revertirDecision() async {
+    if (_uid == null || _unidadId == null || _decision == null) return;
+    setState(() => _guardandoDecision = true);
+    try {
+      await FirebaseFirestore.instance
+          .collection('decisiones_laboreo_profundo')
+          .doc(_decision!.docId)
+          .delete();
+      if (!mounted) return;
+      setState(() {
+        _decision = null;
+        _guardandoDecision = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _guardandoDecision = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No se pudo revertir la decisión: $e')),
+      );
+    }
+  }
+
+  Future<void> _agregarBloqueSuperficial() async {
+    if (_uid == null || _unidadId == null) return;
+    setState(() => _agregandoSuperficial = true);
+    try {
+      final ref = FirebaseFirestore.instance
+          .collection('actividades_laboreo_superficial')
+          .doc();
+      await ref.set({
+        'uid': _uid!,
+        'unidad': _unidadId!,
+        'seleccion': _seleccionSuperficial,
+        'done': false,
+        'createdAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+        'expiresAt': Timestamp.fromDate(
+          DateTime.now().add(const Duration(days: 180)),
+        ),
+      });
+      final snap = await ref.get();
+      final registro = _ActividadSuperficialRegistro.fromDocument(snap);
+      if (!mounted) return;
+      setState(() {
+        _superficiales = <_ActividadSuperficialRegistro>[registro, ..._superficiales];
+        _agregandoSuperficial = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Actividad de laboreo superficial guardada.')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _agregandoSuperficial = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No se pudo registrar la actividad: $e')),
+      );
+    }
+  }
+
+  Future<void> _abrirReporteProfundo(String fuente) async {
+    final resultado = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => const ReporteActividadLaboreoProfundoPage(),
+      ),
+    );
+    if (resultado == true) {
+      await _registrarReporteProfundo(fuente);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Actividad de laboreo profundo registrada.')),
+      );
+    }
+  }
+
+  Future<void> _abrirReporteSuperficial(
+    _ActividadSuperficialRegistro registro,
+  ) async {
+    final resultado = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => ReporteActividadLaboreoSuperficialPage(
+          seleccion: registro.seleccion,
+        ),
+      ),
+    );
+    if (resultado == true) {
+      try {
+        final docRef = FirebaseFirestore.instance
+            .collection('actividades_laboreo_superficial')
+            .doc(registro.docId);
+        await docRef.set({
+          'done': true,
+          'reporteEmitidoAt': FieldValue.serverTimestamp(),
+          'updatedAt': FieldValue.serverTimestamp(),
+          'expiresAt': Timestamp.fromDate(
+            DateTime.now().add(const Duration(days: 180)),
+          ),
+        }, SetOptions(merge: true));
+        final snap = await docRef.get();
+        final actualizado = _ActividadSuperficialRegistro.fromDocument(snap);
+        if (!mounted) return;
+        setState(() {
+          _superficiales = _superficiales
+              .map((e) => e.docId == actualizado.docId ? actualizado : e)
+              .toList();
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Actividad de laboreo superficial registrada.')),
+        );
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('No se pudo actualizar el reporte: $e')),
+        );
       }
     }
   }
 
-  Future<void> _refreshSuperficiales() async {
-    if (_uid == null || _unidadId == null) return;
-    final docs = await _service.actividadesSuperficiales(
-      uid: _uid!,
-      unidadId: _unidadId!,
-    );
-    if (!mounted) return;
-    setState(() {
-      _superficiales = docs.map(_ActividadSuperficialState.fromSnapshot).toList();
-    });
+  List<Widget> _manualesPlaceholder(String seleccion) {
+    final widgets = <Widget>[];
+    if (seleccion == 'rastra' || seleccion == 'ambos') {
+      widgets.add(_listaManuales('Rastreo', ['Manual de Rastreo 1', 'Manual de Rastreo 2']));
+    }
+    if (seleccion == 'desterronador' || seleccion == 'ambos') {
+      widgets.add(_listaManuales(
+        'Desterronador',
+        ['Manual de Desterronador 1', 'Manual de Desterronador 2'],
+      ));
+    }
+    return widgets;
   }
 
-  Future<void> _abrirReporteSuperficial(
-      _ActividadSuperficialState registro) async {
-    if (_uid == null || _unidadId == null) return;
-    final result = await Navigator.of(context).pushNamed<bool>(
-      AppRoutes.reporteLaboreoSuperficial,
-      arguments: LaboreoSuperficialArgs(
-        uid: _uid!,
-        unidadId: _unidadId!,
-        actividades: registro.actividades,
-        actividadDocId: registro.docId,
+  Widget _listaManuales(String titulo, List<String> items) {
+    return Card(
+      margin: const EdgeInsets.symmetric(vertical: 4),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(titulo, style: const TextStyle(fontWeight: FontWeight.w600)),
+            const SizedBox(height: 8),
+            for (final item in items)
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.picture_as_pdf_outlined),
+                title: Text(item),
+                trailing: IconButton(
+                  icon: const Icon(Icons.visibility),
+                  onPressed: () {},
+                ),
+              ),
+          ],
+        ),
       ),
     );
-    if (result == true) {
-      await _refreshSuperficiales();
-    }
-  }
-
-  List<String> _mapActividadesDesdeSeleccion(String seleccion) {
-    switch (seleccion) {
-      case 'Rastreo':
-        return const ['rastra'];
-      case 'Desterronador':
-        return const ['desterronador'];
-      case 'Ambos':
-        return const ['rastra', 'desterronador'];
-      default:
-        return const [];
-    }
-  }
-
-  String _nombreActividad(String raw) {
-    switch (raw.toLowerCase()) {
-      case 'rastra':
-        return 'Rastreo';
-      case 'desterronador':
-        return 'Desterronador';
-      default:
-        return raw;
-    }
   }
 
   Widget _manualPlaceholder() {
@@ -772,73 +1008,28 @@ class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
     );
   }
 
-  Widget _palomitaRow(String label, DateTime fecha) {
-    final fechaTxt = DateFormat('dd/MM/yyyy').format(fecha);
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        const Icon(Icons.check_circle, color: Colors.green),
-        const SizedBox(width: 6),
-        Text('$label — $fechaTxt',
-            style: const TextStyle(fontWeight: FontWeight.w600)),
-      ],
-    );
-  }
-
-  Widget _infoChip({required IconData icon, required Color color, required String text}) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.4)),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, color: color),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              text,
-              style: TextStyle(color: color, fontWeight: FontWeight.w600),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _placeholderCard(String text) {
     return Container(
+      width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: Colors.grey.shade300),
       ),
-      child: Text(text, style: const TextStyle(fontWeight: FontWeight.w500)),
+      child: Text(
+        text,
+        style: const TextStyle(fontWeight: FontWeight.w500),
+      ),
     );
   }
 
-  Widget _barraRecomendacion(String color, String texto) {
-    Color bg;
-    switch (color) {
-      case 'verde':
-        bg = Colors.green.shade600;
-        break;
-      case 'amarillo':
-        bg = Colors.amber.shade600;
-        break;
-      case 'rojo':
-        bg = Colors.red.shade600;
-        break;
-      default:
-        bg = Colors.blueGrey.shade400;
-    }
+  Widget _barraRecomendacion(_EstadoColor estado, String texto) {
+    final color = _colorParaEstado(estado);
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
       decoration: BoxDecoration(
-        color: bg,
+        color: color,
         borderRadius: BorderRadius.circular(8),
       ),
       child: Text(
@@ -849,6 +1040,20 @@ class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
         ),
       ),
     );
+  }
+
+  Color _colorParaEstado(_EstadoColor estado) {
+    switch (estado) {
+      case _EstadoColor.verde:
+        return const Color(0xFF2E7D32);
+      case _EstadoColor.amarillo:
+        return const Color(0xFFF9A825);
+      case _EstadoColor.rojo:
+        return const Color(0xFFC62828);
+      case _EstadoColor.desconocido:
+      default:
+        return Colors.blueGrey.shade400;
+    }
   }
 
   Future<void> _abrirUrl(String url) async {
@@ -868,13 +1073,28 @@ class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
     }
   }
 
-  static String? _normalizaColor(String? raw) {
-    final value = raw?.trim().toLowerCase();
-    if (value == null || value.isEmpty) return null;
-    if (value == 'verde' || value == 'amarillo' || value == 'rojo') {
-      return value;
+  _EstadoColor _estadoDesdeColor(String? color) {
+    switch (color) {
+      case 'verde':
+        return _EstadoColor.verde;
+      case 'amarillo':
+        return _EstadoColor.amarillo;
+      case 'rojo':
+        return _EstadoColor.rojo;
+      default:
+        return _EstadoColor.desconocido;
     }
-    return null;
   }
 
+  String _nombreSeleccion(String raw) {
+    switch (raw) {
+      case 'ambos':
+        return 'Rastreo y Desterronador';
+      case 'desterronador':
+        return 'Desterronador';
+      case 'rastra':
+      default:
+        return 'Rastreo';
+    }
+  }
 }
