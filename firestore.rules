@@ -11,10 +11,23 @@ service cloud.firestore {
 
     function hasRequiredRepoFields() {
       return request.resource != null
-        && request.resource.data.keys().hasAll(['uid', 'unidad', 'fecha'])
+        && request.resource.data.keys().hasAll([
+          'uid',
+          'unidad',
+          'decision',
+          'fuente',
+          'createdAt',
+          'updatedAt',
+          'ultimoReporteAt',
+        ])
         && request.resource.data.uid is string
         && request.resource.data.unidad is string
-        && request.resource.data.fecha is timestamp;
+        && request.resource.data.decision is string
+        && request.resource.data.fuente is string
+        && request.resource.data.createdAt is timestamp
+        && request.resource.data.updatedAt is timestamp
+        && (request.resource.data.ultimoReporteAt == null
+          || request.resource.data.ultimoReporteAt is timestamp);
     }
 
     function canCreateRepoDoc() {
