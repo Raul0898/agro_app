@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'reporte_actividad_laboreo_profundo.dart';
 import 'reporte_actividad_laboreo_superficial.dart';
+import 'selector_contexto_page.dart';
 
 class PreparacionSuelosPage extends StatefulWidget {
   const PreparacionSuelosPage({super.key});
@@ -17,10 +18,9 @@ class PreparacionSuelosPage extends StatefulWidget {
 enum _EstadoColor { verde, amarillo, rojo, desconocido }
 
 class _SeccionInfo {
-  const _SeccionInfo({required this.id, required this.label});
+  const _SeccionInfo({required this.id});
 
   final String id;
-  final String label;
 }
 
 class _SeccionResultado {
@@ -196,23 +196,132 @@ class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
       if (!mounted) return;
       setState(() {
         _loading = false;
-        _error = 'Error al cargar los datos: $e';
+        _error = e.toString();
       });
     }
   }
 
   Future<String> _resolverUnidad(String uid) async {
+    final desdeContexto = _unidadDesdeContexto();
+    if (desdeContexto != null) {
+      return desdeContexto;
+    }
+
+    final desdePerfil = await _unidadDesdePerfil(uid);
+    if (desdePerfil != null) {
+      return desdePerfil;
+    }
+
+    final desdeCatalogo = await _unidadDesdeCatalogo(uid);
+    if (desdeCatalogo != null) {
+      return desdeCatalogo;
+    }
+
+    throw Exception('No se encontró una unidad asignada al perfil.');
+  }
+
+  String? _unidadDesdeContexto() {
+    try {
+      final args = ModalRoute.of(context)?.settings.arguments;
+      if (args is Map) {
+        final candidates = <String?>[
+          _stringFromDynamic(args['unidadSeleccionada']),
+          _stringFromDynamic(args['unidad_seleccionada']),
+          _stringFromDynamic(args['unidad']),
+          _stringFromDynamic(args['unidadId']),
+          _stringFromDynamic(args['unidad_id']),
+        ];
+        return _firstNonEmpty(candidates);
+      }
+    } catch (_) {
+      // Ignorar: no hay argumentos o no se pueden leer en este contexto.
+    }
+    return null;
+  }
+
+  Future<String?> _unidadDesdePerfil(String uid) async {
     final userDoc =
         await FirebaseFirestore.instance.collection('users').doc(uid).get();
     final data = userDoc.data() ?? <String, dynamic>{};
-    final unidad = (data['unidad'] as String?) ??
-        (data['unidades'] is List && (data['unidades'] as List).isNotEmpty
-            ? (data['unidades'] as List).first as String?
-            : null);
-    if (unidad == null || unidad.trim().isEmpty) {
-      throw Exception('No se encontró una unidad asignada al perfil.');
+
+    Map<dynamic, dynamic>? contexto;
+    final rawContexto = data['contexto'];
+    if (rawContexto is Map) {
+      contexto = rawContexto;
     }
-    return unidad.trim();
+
+    String? contextoUnidad;
+    if (contexto != null) {
+      contextoUnidad = _firstNonEmpty([
+        _stringFromDynamic(contexto['unidad']),
+        _stringFromDynamic(contexto['unidadId']),
+        _stringFromDynamic(contexto['unidad_id']),
+        _stringFromDynamic(contexto['unidadSeleccionada']),
+        _stringFromDynamic(contexto['unidad_seleccionada']),
+      ]);
+    }
+
+    String? primeraUnidadLista;
+    final rawUnidades = data['unidades'];
+    if (rawUnidades is List) {
+      for (final item in rawUnidades) {
+        final valor = _stringFromDynamic(item);
+        if (valor != null && valor.isNotEmpty) {
+          primeraUnidadLista = valor;
+          break;
+        }
+      }
+    }
+
+    final candidatos = <String?>[
+      _stringFromDynamic(data['unidadSeleccionada']),
+      _stringFromDynamic(data['unidad_seleccionada']),
+      _stringFromDynamic(data['unidadActual']),
+      _stringFromDynamic(data['unidad_actual']),
+      _stringFromDynamic(data['unidadIdActual']),
+      _stringFromDynamic(data['unidadId']),
+      _stringFromDynamic(data['unidad_id']),
+      _stringFromDynamic(data['unidad']),
+      contextoUnidad,
+      primeraUnidadLista,
+    ];
+
+    return _firstNonEmpty(candidatos);
+  }
+
+  Future<String?> _unidadDesdeCatalogo(String uid) async {
+    final query = await FirebaseFirestore.instance
+        .collection('unidades_catalog')
+        .where('miembros', arrayContains: uid)
+        .limit(1)
+        .get();
+    if (query.docs.isEmpty) return null;
+    final id = query.docs.first.id.trim();
+    return id.isEmpty ? null : id;
+  }
+
+  String? _firstNonEmpty(Iterable<String?> values) {
+    for (final value in values) {
+      final trimmed = value?.trim();
+      if (trimmed != null && trimmed.isNotEmpty) {
+        return trimmed;
+      }
+    }
+    return null;
+  }
+
+  String? _stringFromDynamic(dynamic value) {
+    if (value is String) {
+      return value.trim();
+    }
+    if (value is DocumentReference) {
+      return value.id.trim();
+    }
+    if (value is num) {
+      final normalized = value.toString().trim();
+      return normalized.isEmpty ? null : normalized;
+    }
+    return null;
   }
 
   Future<List<_SeccionInfo>> _resolverSecciones(String unidad) async {
@@ -222,38 +331,94 @@ class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
         .get();
     final data = doc.data() ?? <String, dynamic>{};
 
-    if (data['secciones'] is List) {
-      final list = (data['secciones'] as List)
-          .whereType<dynamic>()
-          .map((e) => e.toString().trim())
-          .where((e) => e.isNotEmpty)
-          .toList();
-      if (list.isNotEmpty) {
-        return list
-            .map((value) => _SeccionInfo(
-                  id: value,
-                  label: value.toLowerCase().startsWith('sección')
-                      ? value
-                      : 'Sección $value',
-                ))
-            .toList();
-      }
+    final seccionesDesdeLista = _mapearSeccionesDesdeLista(data['secciones']);
+    if (seccionesDesdeLista.isNotEmpty) {
+      return seccionesDesdeLista;
     }
 
-    final count = data['seccionesCount'];
-    if (count is int && count > 0) {
+    final count = _intFromDynamic(data['seccionesCount']) ??
+        _intFromDynamic(data['num_secciones']) ??
+        _intFromDynamic(data['numSecciones']);
+    if (count != null && count > 0) {
       return List<_SeccionInfo>.generate(
         count,
         (index) => _SeccionInfo(
           id: '${index + 1}',
-          label: 'Sección ${index + 1}',
         ),
       );
     }
 
     return const <_SeccionInfo>[
-      _SeccionInfo(id: 'unica', label: 'Sección Única'),
+      _SeccionInfo(id: '1'),
     ];
+  }
+
+  List<_SeccionInfo> _mapearSeccionesDesdeLista(dynamic raw) {
+    if (raw is! List) return const <_SeccionInfo>[];
+    final resultado = <_SeccionInfo>[];
+    final vistos = <String>{};
+    for (final entry in raw) {
+      final id = _normalizarSeccionId(entry);
+      if (id == null || id.isEmpty) continue;
+      if (vistos.add(id)) {
+        resultado.add(_SeccionInfo(id: id));
+      }
+    }
+    return resultado;
+  }
+
+  String? _normalizarSeccionId(dynamic entry) {
+    if (entry is String) {
+      final trimmed = entry.trim();
+      if (trimmed.isEmpty) return null;
+      final match = RegExp(r'(\d+)').firstMatch(trimmed);
+      if (match != null) {
+        return match.group(1);
+      }
+      return trimmed;
+    }
+    if (entry is num) {
+      final normalized = entry.toString().trim();
+      return normalized.isEmpty ? null : normalized;
+    }
+    if (entry is Map) {
+      const preferredKeys = <String>[
+        'id',
+        'uid',
+        'valueSlug',
+        'value',
+        'slug',
+        'numero',
+        'numeroSeccion',
+        'numero_seccion',
+        'seccion',
+        'section',
+      ];
+      for (final key in preferredKeys) {
+        if (!entry.containsKey(key)) continue;
+        final maybe = _stringFromDynamic(entry[key]) ??
+            (entry[key] is num ? entry[key].toString() : null);
+        final normalized = _normalizarSeccionId(maybe);
+        if (normalized != null && normalized.isNotEmpty) {
+          return normalized;
+        }
+      }
+      final nombre = entry['nombre'] ?? entry['name'] ?? entry['title'] ?? entry['label'];
+      final normalizedNombre = _normalizarSeccionId(nombre);
+      if (normalizedNombre != null && normalizedNombre.isNotEmpty) {
+        return normalizedNombre;
+      }
+    }
+    return null;
+  }
+
+  int? _intFromDynamic(dynamic value) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    if (value is String) {
+      return int.tryParse(value);
+    }
+    return null;
   }
 
   Future<_SeccionResultado> _cargarResultado(
@@ -382,13 +547,34 @@ class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
       return const Center(child: CircularProgressIndicator());
     }
     if (_error != null) {
+      final esUnidad = _error!.toLowerCase().contains('unidad');
+      final mensaje = 'Error al cargar los datos:\n${_error!}';
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(16),
-          child: Text(
-            _error!,
-            textAlign: TextAlign.center,
-            style: const TextStyle(fontWeight: FontWeight.w600),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                mensaje,
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+              if (esUnidad) ...[
+                const SizedBox(height: 16),
+                FilledButton.icon(
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const SelectorContextoPage(),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.place_outlined),
+                  label: const Text('Seleccionar unidad'),
+                ),
+              ],
+            ],
           ),
         ),
       );
@@ -452,7 +638,8 @@ class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
           children: [
             Row(
               children: [
-                Text(resultado.info.label, style: theme.textTheme.titleMedium),
+                Text('Sección ${resultado.info.id}',
+                    style: theme.textTheme.titleMedium),
                 const Spacer(),
                 Icon(Icons.segment, color: theme.colorScheme.primary),
               ],
