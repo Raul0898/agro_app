@@ -76,6 +76,24 @@
         {"fieldPath": "unidad", "order": "ASCENDING"},
         {"fieldPath": "updatedAt", "order": "DESCENDING"}
       ]
+    },
+    {
+      "collectionGroup": "decisiones_laboreo_profundo",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {"fieldPath": "uid", "order": "ASCENDING"},
+        {"fieldPath": "unidad", "order": "ASCENDING"},
+        {"fieldPath": "createdAt", "order": "DESCENDING"}
+      ]
+    },
+    {
+      "collectionGroup": "actividades_laboreo_superficial",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {"fieldPath": "uid", "order": "ASCENDING"},
+        {"fieldPath": "unidad", "order": "ASCENDING"},
+        {"fieldPath": "createdAt", "order": "DESCENDING"}
+      ]
     }
   ],
   "fieldOverrides": []
