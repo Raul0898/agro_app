@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -147,11 +148,19 @@ class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
   List<_ActividadSuperficialRegistro> _superficiales = const [];
   bool _agregandoSuperficial = false;
   String _seleccionSuperficial = 'rastra';
+  final Set<String> _superficialesNuevos = <String>{};
+  String? _eliminandoSuperficialId;
 
   @override
   void initState() {
     super.initState();
-    _cargarTodo();
+    initializeDateFormatting('es_MX', null)
+        .catchError((_) {})
+        .whenComplete(() {
+      if (mounted) {
+        _cargarTodo();
+      }
+    });
   }
 
   Future<void> _cargarTodo() async {
@@ -190,6 +199,13 @@ class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
           ..addAll(resultados);
         _decision = decision;
         _superficiales = superficiales;
+        _superficialesNuevos.removeWhere(
+          (id) => superficiales.every((registro) => registro.docId != id),
+        );
+        if (_eliminandoSuperficialId != null &&
+            superficiales.every((registro) => registro.docId != _eliminandoSuperficialId)) {
+          _eliminandoSuperficialId = null;
+        }
         _loading = false;
       });
     } catch (e) {
@@ -425,74 +441,69 @@ class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
     String unidad,
     _SeccionInfo seccion,
   ) async {
-    Query<Map<String, dynamic>> query = FirebaseFirestore.instance
-        .collection('resultados_analisis_compactacion')
-        .where('unidad', isEqualTo: unidad)
-        .where('seccion', isEqualTo: seccion.id)
-        .orderBy('updatedAt', descending: true)
-        .limit(1);
+    Future<QuerySnapshot<Map<String, dynamic>>> ejecutarConsulta(
+        dynamic seccionValor) async {
+      Query<Map<String, dynamic>> query = FirebaseFirestore.instance
+          .collection('resultados_analisis_compactacion')
+          .where('unidad', isEqualTo: unidad)
+          .where('seccion', isEqualTo: seccionValor)
+          .orderBy('fecha', descending: true)
+          .orderBy('updatedAt', descending: true)
+          .limit(1);
 
-    QuerySnapshot<Map<String, dynamic>> snap;
-    try {
-      snap = await query.get();
-    } on FirebaseException catch (e) {
-      if (e.code == 'failed-precondition') {
-        snap = await FirebaseFirestore.instance
-            .collection('resultados_analisis_compactacion')
-            .where('unidad', isEqualTo: unidad)
-            .where('seccion', isEqualTo: seccion.id)
-            .limit(1)
-            .get();
-      } else {
+      try {
+        return await query.get();
+      } on FirebaseException catch (e) {
+        if (e.code == 'failed-precondition') {
+          try {
+            return await FirebaseFirestore.instance
+                .collection('resultados_analisis_compactacion')
+                .where('unidad', isEqualTo: unidad)
+                .where('seccion', isEqualTo: seccionValor)
+                .orderBy('updatedAt', descending: true)
+                .limit(1)
+                .get();
+          } on FirebaseException catch (inner) {
+            if (inner.code == 'failed-precondition') {
+              return FirebaseFirestore.instance
+                  .collection('resultados_analisis_compactacion')
+                  .where('unidad', isEqualTo: unidad)
+                  .where('seccion', isEqualTo: seccionValor)
+                  .limit(1)
+                  .get();
+            }
+            rethrow;
+          }
+        }
         rethrow;
       }
     }
 
+    QuerySnapshot<Map<String, dynamic>> snap =
+        await ejecutarConsulta(seccion.id);
     if (snap.docs.isEmpty) {
       final asInt = int.tryParse(seccion.id);
       if (asInt != null) {
-        Query<Map<String, dynamic>> altQuery = FirebaseFirestore.instance
-            .collection('resultados_analisis_compactacion')
-            .where('unidad', isEqualTo: unidad)
-            .where('seccion', isEqualTo: asInt)
-            .orderBy('updatedAt', descending: true)
-            .limit(1);
-        try {
-          snap = await altQuery.get();
-        } on FirebaseException catch (e) {
-          if (e.code == 'failed-precondition') {
-            snap = await FirebaseFirestore.instance
-                .collection('resultados_analisis_compactacion')
-                .where('unidad', isEqualTo: unidad)
-                .where('seccion', isEqualTo: asInt)
-                .limit(1)
-                .get();
-          } else {
-            rethrow;
-          }
-        }
+        snap = await ejecutarConsulta(asInt);
       }
     }
 
-    DocumentSnapshot<Map<String, dynamic>>? doc;
-    if (snap.docs.isNotEmpty) {
-      doc = snap.docs.first;
-    }
-
+    final doc = snap.docs.isNotEmpty ? snap.docs.first : null;
     final data = doc?.data() ?? <String, dynamic>{};
-    final recomendacion =
-        (data['recomendacion'] as Map<String, dynamic>?) ?? const {};
+    final rawRecomendacion = data['recomendacion'];
+    final recomendacion = rawRecomendacion is Map<String, dynamic>
+        ? rawRecomendacion
+        : <String, dynamic>{};
     final colorRaw = (recomendacion['color'] as String?)?.toLowerCase().trim();
-    final texto = (recomendacion['texto'] as String?)?.trim() ??
-        'Sin recomendación disponible';
+    final texto =
+        (recomendacion['texto'] as String?)?.trim() ?? 'Sin recomendación disponible';
     final nombre = (data['nombreArchivo'] as String?) ??
         (data['nombre'] as String?) ??
         (data['titulo'] as String?);
     final url = (data['urlPdf'] as String?) ??
         (data['url'] as String?) ??
         (data['downloadUrl'] as String?);
-    final fecha = (data['updatedAt'] as Timestamp?)?.toDate() ??
-        (data['createdAt'] as Timestamp?)?.toDate();
+    final fecha = _extraerFecha(data);
 
     return _SeccionResultado(
       info: seccion,
@@ -892,6 +903,8 @@ class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
         ? 'Fecha no disponible'
         : DateFormat('dd/MM/yyyy HH:mm', 'es_MX').format(fecha);
     final seleccionTexto = _nombreSeleccion(registro.seleccion);
+    final esNuevo = _superficialesNuevos.contains(registro.docId);
+    final eliminando = _eliminandoSuperficialId == registro.docId;
 
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 8),
@@ -913,17 +926,39 @@ class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
             const SizedBox(height: 4),
             Text('Registrado: $fechaTexto', style: theme.textTheme.bodySmall),
             const SizedBox(height: 12),
-            Row(
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
               children: [
                 FilledButton.icon(
                   onPressed: () => _abrirReporteSuperficial(registro),
                   icon: const Icon(Icons.assignment_outlined),
                   label: const Text('Reporte de Actividad'),
                 ),
-                if (registro.reporteVigente) ...[
-                  const SizedBox(width: 8),
+                if (registro.reporteVigente)
                   const Icon(Icons.check_circle, color: Colors.green),
-                ],
+                if (esNuevo)
+                  OutlinedButton.icon(
+                    onPressed: eliminando
+                        ? null
+                        : () => _eliminarSuperficialNuevo(registro),
+                    icon: eliminando
+                        ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.delete_outline),
+                    label: Text(
+                      eliminando
+                          ? 'Eliminando…'
+                          : '🗑 Eliminar Laboreo Superficial',
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.redAccent,
+                    ),
+                  ),
               ],
             ),
           ],
@@ -1057,6 +1092,7 @@ class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
       if (!mounted) return;
       setState(() {
         _superficiales = <_ActividadSuperficialRegistro>[registro, ..._superficiales];
+        _superficialesNuevos.add(registro.docId);
         _agregandoSuperficial = false;
       });
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1067,6 +1103,42 @@ class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
       setState(() => _agregandoSuperficial = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('No se pudo registrar la actividad: $e')),
+      );
+    }
+  }
+
+  Future<void> _eliminarSuperficialNuevo(
+    _ActividadSuperficialRegistro registro,
+  ) async {
+    if (!_superficialesNuevos.contains(registro.docId)) {
+      return;
+    }
+    setState(() => _eliminandoSuperficialId = registro.docId);
+    try {
+      await FirebaseFirestore.instance
+          .collection('actividades_laboreo_superficial')
+          .doc(registro.docId)
+          .delete();
+      if (!mounted) return;
+      setState(() {
+        _superficiales = _superficiales
+            .where((element) => element.docId != registro.docId)
+            .toList(growable: false);
+        _superficialesNuevos.remove(registro.docId);
+        _eliminandoSuperficialId = null;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Laboreo superficial eliminado.')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        if (_eliminandoSuperficialId == registro.docId) {
+          _eliminandoSuperficialId = null;
+        }
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No se pudo eliminar la actividad: $e')),
       );
     }
   }
@@ -1208,6 +1280,21 @@ class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
         style: const TextStyle(fontWeight: FontWeight.w500),
       ),
     );
+  }
+
+  DateTime? _extraerFecha(Map<String, dynamic> data) {
+    final fechaCampo = data['fecha'];
+    if (fechaCampo is Timestamp) {
+      return fechaCampo.toDate();
+    }
+    if (fechaCampo is String) {
+      final parsed = DateTime.tryParse(fechaCampo);
+      if (parsed != null) {
+        return parsed;
+      }
+    }
+    return (data['updatedAt'] as Timestamp?)?.toDate() ??
+        (data['createdAt'] as Timestamp?)?.toDate();
   }
 
   Widget _barraRecomendacion(_EstadoColor estado, String texto) {
