@@ -25,33 +25,13 @@ class _SeccionInfo {
   final String id;
 }
 
-class _ArchivoStorageInfo {
-  const _ArchivoStorageInfo({
-    required this.nombre,
-    required this.fecha,
-    required this.url,
-    required this.metadata,
-  });
-
-  final String nombre;
-  final DateTime? fecha;
-  final String url;
-  final fb_storage.FullMetadata metadata;
-}
-
-class _RecomendacionInfo {
-  const _RecomendacionInfo({
-    required this.color,
-    required this.texto,
-    this.doc,
-    this.fecha,
-  });
-
-  final _EstadoColor color;
-  final String texto;
-  final DocumentSnapshot<Map<String, dynamic>>? doc;
-  final DateTime? fecha;
-}
+typedef _AnalisisSeccion = ({
+  String? nombreArchivo,
+  String? storagePath,
+  DateTime? fecha,
+  String? recomendacion,
+  _EstadoColor estado,
+});
 
 class _DecisionSeccionState {
   const _DecisionSeccionState({
@@ -171,6 +151,13 @@ bool _isWithinSixMonths(DateTime? date) {
   return now.difference(date).inDays <= 180;
 }
 
+String _fmt(DateTime? value) {
+  if (value == null) {
+    return 'Sin fecha disponible';
+  }
+  return DateFormat('dd MMM yyyy, HH:mm', 'es_MX').format(value);
+}
+
 class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
   bool _loading = true;
   String? _error;
@@ -231,8 +218,7 @@ class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
     try {
       final unidad = await _resolverUnidad(uid);
       final secciones = await _resolverSecciones(unidad);
-      final archivos = <String, _ArchivoStorageInfo?>{};
-      final recomendaciones = <String, _RecomendacionInfo?>{};
+      final datosPorSeccion = <String, _AnalisisSeccion?>{};
       bool hayRojo = false;
       bool hayAmarillo = false;
       final datosPorSeccion = <
@@ -321,10 +307,7 @@ class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
         _uid = uid;
         _unidadId = unidad;
         _secciones = secciones;
-        _archivosPorSeccion
-          ..clear()
-          ..addAll(archivos);
-        _recomendacionesPorSeccion
+        _datosPorSeccion
           ..clear()
           ..addAll(recomendaciones);
         _datosPorSeccion
@@ -608,79 +591,7 @@ class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
     return null;
   }
 
-  Future<_ArchivoStorageInfo?> _ultimoArchivoStorage(
-    String unidad,
-    _SeccionInfo seccion,
-  ) async {
-    final unidadStorage = _sanitizeStorageSegment(unidad);
-    final seccionStorage = _idStorage(seccion);
-    if (seccionStorage == null || seccionStorage.isEmpty) {
-      return null;
-    }
-    final year = DateTime.now().year.toString();
-    final path =
-        'unidades_info/$unidadStorage/analisis_suelo/analisis/analisis_compactacion/$seccionStorage/$year';
-    try {
-      final ref = fb_storage.FirebaseStorage.instance.ref(path);
-      final listado = await ref.listAll();
-      if (listado.items.isEmpty) {
-        return null;
-      }
-      _ArchivoStorageInfo? seleccionado;
-      DateTime? referenciaSeleccionado;
-      for (final item in listado.items) {
-        final info = await _infoArchivo(item);
-        if (info == null) continue;
-        final referencia = info.fecha ??
-            info.metadata.updated ??
-            info.metadata.timeCreated;
-        if (seleccionado == null) {
-          seleccionado = info;
-          referenciaSeleccionado = referencia;
-          continue;
-        }
-        final actual = referencia ?? DateTime.fromMillisecondsSinceEpoch(0);
-        final previo = referenciaSeleccionado ??
-            DateTime.fromMillisecondsSinceEpoch(0);
-        if (actual.isAfter(previo)) {
-          seleccionado = info;
-          referenciaSeleccionado = referencia;
-        }
-      }
-      return seleccionado;
-    } on fb_storage.FirebaseException catch (_) {
-      return null;
-    }
-  }
-
-  Future<_ArchivoStorageInfo?> _infoArchivo(
-    fb_storage.Reference ref,
-  ) async {
-    try {
-      final metadata = await ref.getMetadata();
-      final url = await ref.getDownloadURL();
-      final custom = metadata.customMetadata ?? <String, String>{};
-      final nombreCustom = custom['nombre'] ??
-          custom['fileName'] ??
-          custom['nombreArchivo'];
-      final nombre = (nombreCustom != null && nombreCustom.trim().isNotEmpty)
-          ? nombreCustom.trim()
-          : (metadata.name?.trim().isNotEmpty == true
-              ? metadata.name!.trim()
-              : ref.name.trim());
-      final fecha = metadata.timeCreated ?? metadata.updated;
-      return _ArchivoStorageInfo(
-        nombre: nombre,
-        fecha: fecha,
-        url: url,
-        metadata: metadata,
-      );
-    } catch (_) {
-      return null;
-    }
-  }
-
-  Future<_RecomendacionInfo?> _recomendacion(
+  Future<_AnalisisSeccion?> _ultimoAnalisisPorSeccion(
     String unidad,
     _SeccionInfo seccion,
   ) async {
@@ -721,8 +632,7 @@ class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
       }
     }
 
-    QuerySnapshot<Map<String, dynamic>> snap =
-        await ejecutar(seccion.id);
+    QuerySnapshot<Map<String, dynamic>> snap = await ejecutar(seccion.id);
     if (snap.docs.isEmpty) {
       final asInt = int.tryParse(seccion.id);
       if (asInt != null) {
@@ -733,26 +643,68 @@ class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
     if (snap.docs.isEmpty) {
       return null;
     }
-    final doc = snap.docs.first;
-    final data = doc.data();
+
+    final data = snap.docs.first.data();
+    final fecha = _extraerFecha(data);
     final rawRecomendacion = data['recomendacion'];
-    final recomendacion = rawRecomendacion is Map<String, dynamic>
-        ? rawRecomendacion
-        : <String, dynamic>{};
-    final colorRaw = (recomendacion['color'] as String?)?.toLowerCase().trim();
-    final textoRaw = (recomendacion['texto'] as String?)?.trim();
+    String? colorRaw;
+    String? textoRaw;
+    if (rawRecomendacion is Map<String, dynamic>) {
+      colorRaw = (rawRecomendacion['color'] as String?)?.toLowerCase().trim();
+      textoRaw = (rawRecomendacion['texto'] as String?)?.trim();
+    } else if (rawRecomendacion is String) {
+      textoRaw = rawRecomendacion.trim();
+    }
+
+    colorRaw ??= (data['color'] as String?)?.toLowerCase().trim();
+    colorRaw ??= (data['caso'] as String?)?.toLowerCase().trim();
+
+    textoRaw ??= (data['recomendacionTexto'] as String?)?.trim();
+    textoRaw ??= (data['recomendaciones'] as String?)?.trim();
     final texto =
         (textoRaw == null || textoRaw.isEmpty)
             ? 'Sin recomendación disponible'
             : textoRaw;
-    final fecha = _extraerFecha(data);
 
-    return _RecomendacionInfo(
-      color: _estadoDesdeColor(colorRaw),
-      texto: texto,
-      doc: doc,
+    final nombreRaw = (data['nombre'] as String?)?.trim();
+    final nombreAlterno = (data['fileName'] as String?)?.trim();
+    final nombreArchivo =
+        (nombreRaw != null && nombreRaw.isNotEmpty)
+            ? nombreRaw
+            : (nombreAlterno != null && nombreAlterno.isNotEmpty
+                ? nombreAlterno
+                : null);
+
+    final storagePathRaw = (data['storagePath'] as String?)?.trim();
+    final downloadUrl = (data['downloadUrl'] as String?)?.trim();
+    final storagePath =
+        (storagePathRaw != null && storagePathRaw.isNotEmpty)
+            ? storagePathRaw
+            : (downloadUrl != null && downloadUrl.isNotEmpty ? downloadUrl : null);
+
+    return (
+      nombreArchivo: nombreArchivo,
+      storagePath: storagePath,
       fecha: fecha,
+      recomendacion: texto,
+      estado: _estadoDesdeColor(colorRaw),
     );
+  }
+
+  Future<String?> _urlDeStoragePath(String? path) async {
+    final trimmed = path?.trim();
+    if (trimmed == null || trimmed.isEmpty) {
+      return null;
+    }
+    if (trimmed.startsWith('http')) {
+      return trimmed;
+    }
+    try {
+      final ref = fb_storage.FirebaseStorage.instance.ref().child(trimmed);
+      return await ref.getDownloadURL();
+    } on fb_storage.FirebaseException {
+      return null;
+    }
   }
 
   Future<Map<String, _DecisionSeccionState>> _cargarDecisiones(
