@@ -164,31 +164,33 @@ List<String> _seccionCandidatos(String id) {
   ];
 }
 
-String? _str(dynamic v) => v == null ? null : v.toString();
-
-DateTime? _fecha(dynamic v) {
-  if (v == null) return null;
-  if (v is Timestamp) return v.toDate();
-  if (v is DateTime) return v;
-  return DateTime.tryParse(v.toString());
+Map<String, dynamic> _asSD(dynamic v) {
+  if (v is Map) return v.map((k, val) => MapEntry(k.toString(), val));
+  return <String, dynamic>{};
 }
 
-Map<String, dynamic> _asSD(dynamic raw) {
-  if (raw is Map) {
-    final result = <String, dynamic>{};
-    raw.forEach((key, value) {
-      if (key == null) return;
-      result[key.toString()] = value;
-    });
-    return result;
+Map<String, dynamic> _docData(dynamic d) {
+  try {
+    final raw = (d as dynamic).data();
+    if (raw is Map<String, dynamic>) return raw;
+    return _asSD(raw);
+  } catch (_) {
+    return <String, dynamic>{};
   }
-  return const <String, dynamic>{};
 }
 
-Map<String, dynamic> _docData(DocumentSnapshot<Map<String, dynamic>> doc) {
-  final data = doc.data();
-  if (data == null) return const <String, dynamic>{};
-  return _asSD(data);
+_EstadoColor _estadoFromAny(dynamic v) {
+  final s = (v ?? '').toString().toLowerCase().trim();
+  switch (s) {
+    case 'rojo':
+      return _EstadoColor.rojo;
+    case 'amarillo':
+      return _EstadoColor.amarillo;
+    case 'verde':
+      return _EstadoColor.verde;
+    default:
+      return _EstadoColor.desconocido;
+  }
 }
 
 class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
@@ -614,76 +616,68 @@ class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
     }
   }
 
-  DatosSeccion _mapDoc(QueryDocumentSnapshot<Map<String, dynamic>> d) {
+  DatosSeccion _mapDoc(dynamic d) {
     final m = _docData(d);
 
-    final rec = _asSD(
-      m['recomendacion'] ??
-          m['recomendación'] ??
-          m['recommendacion'] ??
-          m['recommendation'] ??
-          m['reporte'] ??
-          m['resultado'],
-    );
-    final color = _str(
-      rec['color'] ?? rec['estado'] ?? rec['nivel'] ?? rec['barraColor'],
-    )?.toLowerCase();
-    final barraColor = switch (color) {
-      'rojo' => _EstadoColor.rojo,
-      'amarillo' => _EstadoColor.amarillo,
-      'verde' => _EstadoColor.verde,
-      _ => _EstadoColor.desconocido,
-    };
-    final barraTexto = _str(
-          rec['texto'] ??
-              rec['descripcion'] ??
-              rec['descripción'] ??
-              rec['mensaje'] ??
-              rec['label'],
-        ) ??
-        'Sin recomendación disponible';
+    // --- Recomendación (acepta varios nombres) ---
+    final rec = _asSD(m['recomendacion']);
+    final colorRaw = rec.isNotEmpty
+        ? (rec['color'] ?? rec['estado'])
+        : (m['recomendacionColor'] ?? m['color'] ?? m['estado']);
+    final textoRaw = rec.isNotEmpty
+        ? (rec['texto'] ?? rec['mensaje'])
+        : (m['recomendacionTexto'] ?? m['texto'] ?? m['mensaje']);
 
-    final arch = _asSD(
-      m['archivo'] ??
-          m['archivoAdjunto'] ??
-          m['archivo_adjunto'] ??
-          m['reporteArchivo'] ??
-          m['reporte_archivo'] ??
-          m['file'] ??
-          m['documento'],
-    );
-    final storagePath = _str(
-      arch['path'] ??
-          arch['storagePath'] ??
-          arch['storage_path'] ??
-          arch['ruta'] ??
-          arch['url'],
-    )?.trim();
+    final barraColor = _estadoFromAny(colorRaw);
+    final barraTexto = (textoRaw ?? 'Sin recomendación disponible').toString();
 
-    final nombreArchivo = _str(
-          arch['nombre'] ??
-              arch['fileName'] ??
-              arch['titulo'] ??
-              arch['title'],
-        ) ??
+    // --- Archivo (acepta varios nombres) ---
+    final arch = _asSD(m['archivo']);
+    String? storagePath = (arch['path'] ??
+            arch['storagePath'] ??
+            arch['storage_path'] ??
+            arch['ruta'])
+        ?.toString()
+        .trim();
+    if (storagePath != null && storagePath.isEmpty) storagePath = null;
+
+    final nombreArchivo = (arch['nombre'] ??
+            arch['fileName'] ??
+            arch['titulo'] ??
+            m['nombreArchivo'])
+        ?.toString() ??
         'Sin archivo reciente';
 
-    final fecha = _fecha(m['fecha']) ??
-        _fecha(m['fechaReporte']) ??
-        _fecha(m['fecha_reporte']) ??
-        _fecha(m['createdAt']) ??
-        _fecha(m['updatedAt']) ??
-        _fecha(rec['fecha']) ??
-        _fecha(rec['fechaReporte']) ??
-        _fecha(rec['fecha_reporte']) ??
-        _fecha(arch['updatedAt']) ??
-        _fecha(arch['uploadedAt']) ??
-        _fecha(arch['actualizado']) ??
-        _fecha(arch['fecha']);
+    // --- Fecha (preferir m['fecha']) ---
+    DateTime? fecha;
+    final f1 = m['fecha'];
+    final f2 = arch['updatedAt'] ?? arch['uploadedAt'] ?? arch['actualizado'];
+    if (f1 is Timestamp) {
+      fecha = f1.toDate();
+    } else if (f1 is DateTime) {
+      fecha = f1;
+    } else if (f1 is String) {
+      fecha = DateTime.tryParse(f1);
+    }
+    if (fecha == null) {
+      if (f2 is Timestamp) {
+        fecha = f2.toDate();
+      } else if (f2 is DateTime) {
+        fecha = f2;
+      } else if (f2 is String) {
+        fecha = DateTime.tryParse(f2);
+      }
+    }
+
+    // Logs de diagnóstico si faltan piezas
+    if (storagePath == null || barraColor == _EstadoColor.desconocido) {
+      // ignore: avoid_print
+      print('[PrepSuelos][mapDoc] faltantes => path=${storagePath ?? "-"} color=${colorRaw ?? "-"} texto=${barraTexto}');
+    }
 
     return (
       nombre: nombreArchivo,
-      storagePath: storagePath?.isEmpty == true ? null : storagePath,
+      storagePath: storagePath,
       fecha: fecha,
       barraTexto: barraTexto,
       barraColor: barraColor,
@@ -843,8 +837,8 @@ class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
   Widget _buildCardSeccion(_SeccionInfo seccion) {
     final theme = Theme.of(context);
     final d = _datosPorSeccion[seccion.id];
-    final estado = d?.barraColor ?? _EstadoColor.desconocido;
-    final textoBarra = d?.barraTexto ?? 'Sin recomendación disponible';
+    final barraColor = d?.barraColor ?? _EstadoColor.desconocido;
+    final barraTexto = d?.barraTexto ?? 'Sin recomendación disponible';
     final nombreArchivo = d?.nombre ?? 'Sin archivo reciente';
     final fechaTexto = () {
       final fecha = d?.fecha;
@@ -853,8 +847,7 @@ class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
       }
       return DateFormat('dd MMM yyyy, HH:mm', 'es_MX').format(fecha);
     }();
-    final storagePath = d?.storagePath;
-    final sinArchivoReciente = storagePath == null || storagePath.isEmpty;
+    final sinArchivo = d?.storagePath == null;
 
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 8),
@@ -879,7 +872,7 @@ class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
                 fontWeight: FontWeight.w600,
               ),
             ),
-            if (sinArchivoReciente) ...[
+            if (sinArchivo) ...[
               const SizedBox(height: 4),
               Text(
                 'Sin archivo reciente. Revisa la recomendación para más detalle.',
@@ -887,21 +880,21 @@ class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
               ),
             ],
             const SizedBox(height: 12),
-            _barraRecomendacion(estado, textoBarra),
+            _barraRecomendacion(barraColor, barraTexto),
             const SizedBox(height: 12),
             Align(
               alignment: Alignment.centerRight,
               child: TextButton.icon(
-                onPressed: sinArchivoReciente
+                onPressed: sinArchivo
                     ? null
                     : () async {
-                        final uri = await _urlDeStoragePath(storagePath);
+                        final uri = await _urlDeStoragePath(d!.storagePath);
                         if (!mounted) return;
                         if (uri == null) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
                               content: Text(
-                                'No se pudo obtener el archivo para mostrar',
+                                'No se pudo abrir el archivo',
                               ),
                             ),
                           );
@@ -913,21 +906,21 @@ class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
                 label: const Text('Vista previa'),
               ),
             ),
-            if (estado == _EstadoColor.rojo) ...[
-              const SizedBox(height: 12),
-              _manualPlaceholder(),
-              const SizedBox(height: 12),
-              Align(
-                alignment: Alignment.centerRight,
-                child: _reporteProfundoButton(
-                  seccion: seccion,
-                  fuente: 'rojo',
+              if (barraColor == _EstadoColor.rojo) ...[
+                const SizedBox(height: 12),
+                _manualPlaceholder(),
+                const SizedBox(height: 12),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: _reporteProfundoButton(
+                    seccion: seccion,
+                    fuente: 'rojo',
+                  ),
                 ),
-              ),
-            ] else if (estado == _EstadoColor.amarillo) ...[
-              const SizedBox(height: 12),
-              _decisionWidgetSeccion(seccion),
-            ],
+              ] else if (barraColor == _EstadoColor.amarillo) ...[
+                const SizedBox(height: 12),
+                _decisionWidgetSeccion(seccion),
+              ],
           ],
         ),
       ),
@@ -1579,18 +1572,15 @@ class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
   Widget _barraRecomendacion(_EstadoColor estado, String texto) {
     final color = _colorParaEstado(estado);
     return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+      height: 32,
       decoration: BoxDecoration(
         color: color,
         borderRadius: BorderRadius.circular(8),
       ),
+      alignment: Alignment.center,
       child: Text(
         texto,
-        style: const TextStyle(
-          color: Colors.white,
-          fontWeight: FontWeight.w600,
-        ),
+        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
       ),
     );
   }
