@@ -4,8 +4,9 @@ import 'dart:io' show Platform;
 import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:flutter/foundation.dart' show kDebugMode, kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, kReleaseMode;
 import 'package:flutter/material.dart';
+import 'package:intl/date_symbol_data_local.dart';
 
 import 'features/auth/ui/login_page.dart';
 import 'features/auth/ui/pages/selector_contexto_page.dart';
@@ -69,19 +70,31 @@ void main() async {
       // );
     } else if (Platform.isAndroid) {
       await FirebaseAppCheck.instance.activate(
-        androidProvider: kDebugMode
-            ? AndroidProvider.debug
-            : AndroidProvider.playIntegrity,
+        androidProvider: kReleaseMode
+            ? AndroidProvider.playIntegrity
+            : AndroidProvider.debug,
       );
     } else if (Platform.isIOS || Platform.isMacOS) {
       await FirebaseAppCheck.instance.activate(
-        appleProvider: AppleProvider.deviceCheck,
+        appleProvider:
+            kReleaseMode ? AppleProvider.deviceCheck : AppleProvider.debug,
       );
     }
     await FirebaseAppCheck.instance.setTokenAutoRefreshEnabled(true);
   } catch (_) {}
 
-  runApp(const AgroApp());
+  await initializeDateFormatting('es_MX', null);
+
+  runApp(const MyApp());
+}
+
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const AgroApp();
+  }
 }
 
 class AgroApp extends StatelessWidget {
