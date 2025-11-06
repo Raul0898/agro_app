@@ -1,12 +1,13 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_storage/firebase_storage.dart' as fb_storage;
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import 'package:agro_app/features/analisis/ui/widgets/repo_card_compaction.dart';
+import 'package:agro_app/features/analisis/ui/widgets/repo_card_compaction.dart'
+    as repo_widgets;
 import 'package:agro_app/features/analisis/ui/widgets/repo_pdf_viewer.dart';
 import 'reporte_actividad_laboreo_profundo.dart';
 import 'reporte_actividad_laboreo_superficial.dart';
@@ -145,36 +146,89 @@ bool _isWithinSixMonths(DateTime? date) {
   return now.difference(date).inDays <= 180;
 }
 
-List<String> _seccionCandidatos(String id) {
-  final n = id.trim();
-  return [
-    n,
-    'Sección $n',
-    'Seccion $n',
-    'seccion_$n',
-    'Seccion_$n',
-    'sec_$n',
-  ];
-}
+List<String> _seccionCandidatos(String n) => [
+      n,
+      'Sección $n',
+      'Seccion $n',
+      'seccion_$n',
+      'Seccion_$n',
+      'sec_$n',
+    ];
 
-Map<String, dynamic> _asSD(dynamic v) {
-  if (v is Map) return v.map((k, val) => MapEntry(k.toString(), val));
-  return <String, dynamic>{};
-}
+Map<String, dynamic> _asSD(dynamic v) =>
+    v is Map ? v.map((k, val) => MapEntry(k.toString(), val)) : <String, dynamic>{};
 
 Map<String, dynamic> _docData(dynamic d) {
   try {
     final raw = (d as dynamic).data();
-    if (raw is Map<String, dynamic>) return raw;
-    return _asSD(raw);
+    return raw is Map<String, dynamic> ? raw : _asSD(raw);
   } catch (_) {
-    return <String, dynamic>{};
+    return {};
+  }
+}
+
+String _str(dynamic v) => v?.toString().trim() ?? '';
+
+String _colorNormalizado(dynamic v) {
+  final s = _str(v).toLowerCase();
+  if (s.contains('rojo')) return 'rojo';
+  if (s.contains('amarillo')) return 'amarillo';
+  if (s.contains('verde')) return 'verde';
+  return 'desconocido';
+}
+
+String _textoPorColor(String color) => switch (color) {
+      'rojo' => 'Requiere Subsuelo',
+      'amarillo' => 'No requiere Subsuelo (monitorear)',
+      'verde' => 'No requiere Subsuelo',
+      _ => 'Sin recomendación disponible',
+    };
+
+Color _chipColor(String color) => switch (color) {
+      'rojo' => const Color(0xFFE53935),
+      'amarillo' => const Color(0xFFFFB300),
+      'verde' => const Color(0xFF43A047),
+      _ => Colors.blueGrey,
+    };
+
+class RepoItem {
+  final String titulo;
+  final DateTime? fecha;
+  final String? storagePath;
+  final String? downloadUrl;
+  final String color;
+  final String texto;
+
+  const RepoItem({
+    required this.titulo,
+    this.fecha,
+    this.storagePath,
+    this.downloadUrl,
+    required this.color,
+    required this.texto,
+  });
+}
+
+Future<String?> _urlDesdeDoc(Map<String, dynamic> m) async {
+  final direct = _str(m['downloadUrl1'] ?? m['downloadURL'] ?? m['url']);
+  if (direct.isNotEmpty) return direct;
+
+  final sp =
+      _str(m['storagePath'] ?? m['path'] ?? m['storage_path'] ?? m['ruta']);
+  if (sp.isEmpty) return null;
+  try {
+    final storage = FirebaseStorage.instance;
+    final ref = sp.startsWith('gs://')
+        ? storage.refFromURL(sp)
+        : storage.ref(sp);
+    return await ref.getDownloadURL();
+  } catch (_) {
+    return null;
   }
 }
 
 _EstadoColor _estadoFromAny(dynamic v) {
-  final s = (v ?? '').toString().toLowerCase().trim();
-  switch (s) {
+  switch (_colorNormalizado(v)) {
     case 'rojo':
       return _EstadoColor.rojo;
     case 'amarillo':
@@ -241,16 +295,17 @@ class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
       var hayRojo = false;
       var hayAmarillo = false;
 
-      for (final seccion in secciones) {
-        final item = await _ultimoDeSeccion(unidad, seccion.id);
-        final repoItem = item ??
-            const RepoItem(
-              titulo: 'Sin archivo reciente',
-              fecha: null,
-              storagePath: null,
-              color: 'desconocido',
-              texto: 'Sin recomendación disponible',
-            );
+        for (final seccion in secciones) {
+          final item = await _ultimoDeSeccion(unidad, seccion.id);
+          final repoItem = item ??
+              const RepoItem(
+                titulo: 'Sin archivo reciente',
+                fecha: null,
+                storagePath: null,
+                downloadUrl: null,
+                color: 'desconocido',
+                texto: 'Sin recomendación disponible',
+              );
 
         final barraColor = _estadoFromAny(repoItem.color);
         if (barraColor == _EstadoColor.rojo) {
@@ -553,126 +608,119 @@ class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
     return null;
   }
 
-  String _colorStr(dynamic value) => (value ?? '').toString().toLowerCase().trim();
-
   Future<RepoItem?> _ultimoDeSeccion(String unidad, String seccionId) async {
-    final col = FirebaseFirestore.instance.collection('resultados_analisis_compactacion');
-    final inValues = _seccionCandidatos(seccionId);
-    Query<Map<String, dynamic>> q = col
-        .where('unidad', isEqualTo: unidad)
-        .where('seccion', whereIn: inValues.take(10).toList())
-        .orderBy('fecha', descending: true)
-        .limit(1);
+    final col = FirebaseFirestore.instance
+        .collection('resultados_analisis_compactacion');
 
-    try {
-      var snap = await q.get();
-      if (snap.docs.isEmpty) {
-        // ignore: avoid_print
-        print('[PrepSuelos] Sin docs. unidad=$unidad seccionId=$seccionId candidatos=$inValues');
-
-        snap = await col
-            .where('unidad', isEqualTo: unidad)
-            .where('seccion', isEqualTo: 'Sección $seccionId')
-            .orderBy('fecha', descending: true)
-            .limit(1)
-            .get();
-        if (snap.docs.isEmpty) {
-          snap = await col
-              .where('unidad', isEqualTo: unidad)
-              .where('seccion', isEqualTo: seccionId)
-              .orderBy('fecha', descending: true)
-              .limit(1)
-              .get();
-          if (snap.docs.isEmpty) return null;
-        }
-      }
-
+    Future<RepoItem?> _fromSnap(QuerySnapshot<Map<String, dynamic>> snap) async {
+      if (snap.docs.isEmpty) return null;
       final m = _docData(snap.docs.first);
-      final rec = _asSD(m['recomendacion']);
-      final colorRaw = rec.isNotEmpty
-          ? (rec['color'] ?? rec['estado'])
-          : (m['recomendacionColor'] ?? m['color'] ?? m['estado']);
-      final textoRaw = rec.isNotEmpty
-          ? (rec['texto'] ?? rec['mensaje'])
-          : (m['recomendacionTexto'] ?? m['texto'] ?? m['mensaje']);
+      final archivo = _asSD(m['archivo']);
+      final recomendacion = _asSD(m['recomendacion']);
 
-      final arch = _asSD(m['archivo']);
-      String? storagePath = (arch['path'] ??
-              arch['storagePath'] ??
-              arch['storage_path'] ??
-              arch['ruta'])
-          ?.toString()
-          .trim();
-      if (storagePath != null && storagePath.isEmpty) {
-        storagePath = null;
+      var titulo = _str(m['nombre']);
+      if (titulo.isEmpty) {
+        titulo = _str(m['encabezado_nombre']);
       }
-
-      final titulo = (arch['nombre'] ??
-              arch['fileName'] ??
-              arch['titulo'] ??
-              m['nombreArchivo'])
-          ?.toString() ??
-          'Documento sin nombre';
+      if (titulo.isEmpty) {
+        titulo = _str(archivo['nombre'] ??
+            archivo['fileName'] ??
+            archivo['titulo'] ??
+            m['nombreArchivo']);
+      }
+      if (titulo.isEmpty) {
+        titulo = 'Documento sin nombre';
+      }
 
       DateTime? fecha;
-      final f1 = m['fecha'];
-      final f2 = arch['updatedAt'] ?? arch['uploadedAt'] ?? arch['actualizado'];
-      if (f1 is Timestamp) {
-        fecha = f1.toDate();
-      } else if (f1 is DateTime) {
-        fecha = f1;
-      } else if (f1 is String) {
-        fecha = DateTime.tryParse(f1);
-      }
-      if (fecha == null) {
-        if (f2 is Timestamp) {
-          fecha = f2.toDate();
-        } else if (f2 is DateTime) {
-          fecha = f2;
-        } else if (f2 is String) {
-          fecha = DateTime.tryParse(f2);
+      for (final candidate in [
+        m['fecha'],
+        archivo['fecha'],
+        archivo['updatedAt'],
+        archivo['uploadedAt'],
+        archivo['actualizado'],
+      ]) {
+        if (candidate is Timestamp) {
+          fecha = candidate.toDate();
+          break;
+        }
+        if (candidate is DateTime) {
+          fecha = candidate;
+          break;
+        }
+        if (candidate is String) {
+          final parsed = DateTime.tryParse(candidate);
+          if (parsed != null) {
+            fecha = parsed;
+            break;
+          }
         }
       }
 
-      final color = _colorStr(colorRaw).isEmpty ? 'desconocido' : _colorStr(colorRaw);
-      final texto = (textoRaw ?? 'Sin recomendación disponible').toString();
+      final color = _colorNormalizado(
+        m['caso'] ?? recomendacion['color'] ?? archivo['color'],
+      );
 
-      if (storagePath == null || color == 'desconocido') {
-        // ignore: avoid_print
-        print('[PrepSuelos][_ultimoDeSeccion] faltantes => path=${storagePath ?? "-"} color=$color texto=$texto');
-      }
+      final textoRecomendacion = _str(
+        recomendacion['texto'] ?? recomendacion['mensaje'] ?? m['texto'] ?? m['mensaje'],
+      );
+      final texto = textoRecomendacion.isNotEmpty
+          ? textoRecomendacion
+          : _textoPorColor(color);
+
+      final storagePath = _str(
+        m['storagePath'] ??
+            m['path'] ??
+            m['storage_path'] ??
+            m['ruta'] ??
+            archivo['storagePath'] ??
+            archivo['storage_path'] ??
+            archivo['path'] ??
+            archivo['ruta'],
+      );
+
+      final merged = <String, dynamic>{}
+        ..addAll(m)
+        ..addAll(archivo);
+      final directUrl = await _urlDesdeDoc(merged);
 
       return RepoItem(
         titulo: titulo,
         fecha: fecha,
-        storagePath: storagePath,
+        storagePath: storagePath.isEmpty ? null : storagePath,
+        downloadUrl: directUrl,
         color: color,
         texto: texto,
       );
+    }
+
+    try {
+      final inValues = _seccionCandidatos(seccionId).take(10).toList();
+      var snap = await col
+          .where('unidad', isEqualTo: unidad)
+          .where('seccion', whereIn: inValues)
+          .orderBy('fecha', descending: true)
+          .limit(1)
+          .get();
+
+      if (snap.docs.isEmpty) {
+        for (final s in ['Sección $seccionId', seccionId]) {
+          snap = await col
+              .where('unidad', isEqualTo: unidad)
+              .where('seccion', isEqualTo: s)
+              .orderBy('fecha', descending: true)
+              .limit(1)
+              .get();
+          if (snap.docs.isNotEmpty) break;
+        }
+      }
+
+      return await _fromSnap(snap);
     } catch (e) {
       // ignore: avoid_print
-      print('[PrepSuelos] Query error unidad=$unidad seccion=$seccionId -> $e');
-      return null;
-    }
-  }
-
-  Future<String?> _urlDeStoragePath(String? path) async {
-    final trimmed = path?.trim();
-    if (trimmed == null || trimmed.isEmpty) {
-      return null;
-    }
-    if (trimmed.startsWith('http')) {
-      return trimmed;
-    }
-    try {
-      final storage = fb_storage.FirebaseStorage.instance;
-      final ref = trimmed.startsWith('gs://')
-          ? storage.refFromURL(trimmed)
-          : storage.ref().child(trimmed);
-      return await ref.getDownloadURL();
-    } on fb_storage.FirebaseException {
-      return null;
-    } catch (_) {
+      print(
+        '[PrepSuelos] _ultimoDeSeccion unidad=$unidad seccion=$seccionId error: $e',
+      );
       return null;
     }
   }
@@ -813,15 +861,25 @@ class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
           titulo: 'Sin archivo reciente',
           fecha: null,
           storagePath: null,
+          downloadUrl: null,
           color: 'desconocido',
           texto: 'Sin recomendación disponible',
         );
-    final barraColor = _estadoFromAny(repoItem.color);
-    final barraTexto = repoItem.texto.trim().isEmpty
-        ? 'Sin recomendación disponible'
-        : repoItem.texto;
-    final hasArchivo = repoItem.storagePath != null &&
-        repoItem.storagePath!.trim().isNotEmpty;
+    final normalizedColor = _colorNormalizado(repoItem.color);
+    final barraColor = _estadoFromAny(normalizedColor);
+    final barraTexto = repoItem.texto.trim().isNotEmpty
+        ? repoItem.texto
+        : _textoPorColor(normalizedColor);
+    final hasArchivo =
+        _str(repoItem.downloadUrl).isNotEmpty || _str(repoItem.storagePath).isNotEmpty;
+
+    final cardItem = repo_widgets.RepoItem(
+      titulo: repoItem.titulo,
+      fecha: repoItem.fecha,
+      storagePath: repoItem.storagePath,
+      color: normalizedColor,
+      texto: repoItem.texto,
+    );
 
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 8),
@@ -838,15 +896,18 @@ class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
               ],
             ),
             const SizedBox(height: 12),
-            RepoCardCompaction(
-              item: repoItem,
+            repo_widgets.RepoCardCompaction(
+              item: cardItem,
               showDelete: false,
               showTexto: false,
               onPreview: hasArchivo
                   ? () async {
-                      final uri = await _urlDeStoragePath(repoItem.storagePath);
+                      final url = await _urlDesdeDoc({
+                        'downloadUrl1': repoItem.downloadUrl,
+                        'storagePath': repoItem.storagePath,
+                      });
                       if (!mounted) return;
-                      if (uri == null) {
+                      if (url == null || url.isEmpty) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
                             content: Text('No se pudo abrir el archivo.'),
@@ -854,14 +915,17 @@ class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
                         );
                         return;
                       }
-                      await openRepoPdf(context, uri, title: repoItem.titulo);
+                      await openRepoPdf(context, url, title: repoItem.titulo);
                     }
                   : null,
               onDownload: hasArchivo
                   ? () async {
-                      final uri = await _urlDeStoragePath(repoItem.storagePath);
+                      final url = await _urlDesdeDoc({
+                        'downloadUrl1': repoItem.downloadUrl,
+                        'storagePath': repoItem.storagePath,
+                      });
                       if (!mounted) return;
-                      if (uri == null) {
+                      if (url == null || url.isEmpty) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
                             content: Text('No se pudo descargar el archivo.'),
@@ -871,7 +935,7 @@ class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
                       }
                       await downloadRepoFile(
                         context,
-                        uri,
+                        url,
                         suggestedName: sanitizeRepoFileName(repoItem.titulo),
                       );
                     }
@@ -1561,13 +1625,13 @@ class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
   Color _colorParaEstado(_EstadoColor estado) {
     switch (estado) {
       case _EstadoColor.verde:
-        return const Color(0xFF2E7D32);
+        return _chipColor('verde');
       case _EstadoColor.amarillo:
-        return const Color(0xFFFFA825);
+        return _chipColor('amarillo');
       case _EstadoColor.rojo:
-        return const Color(0xFFCF2028);
+        return _chipColor('rojo');
       case _EstadoColor.desconocido:
-        return Colors.blueGrey.shade400;
+        return _chipColor('desconocido');
     }
   }
 
