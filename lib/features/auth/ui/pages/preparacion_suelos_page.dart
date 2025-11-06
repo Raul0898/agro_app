@@ -152,6 +152,27 @@ bool _isWithinSixMonths(DateTime? date) {
   return now.difference(date).inDays <= 180;
 }
 
+List<String> _seccionCandidatos(String id) {
+  final n = id.trim();
+  return [
+    n,
+    'Sección $n',
+    'Seccion $n',
+    'seccion_$n',
+    'Seccion_$n',
+    'sec_$n',
+  ];
+}
+
+String? _str(dynamic v) => v == null ? null : v.toString();
+
+DateTime? _fecha(dynamic v) {
+  if (v == null) return null;
+  if (v is Timestamp) return v.toDate();
+  if (v is DateTime) return v;
+  return DateTime.tryParse(v.toString());
+}
+
 class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
   bool _loading = true;
   String? _error;
@@ -518,52 +539,53 @@ class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
     required String unidad,
     required String seccionId,
   }) async {
-    Future<QuerySnapshot<Map<String, dynamic>>> ejecutar(dynamic seccionValor) async {
-      Query<Map<String, dynamic>> query = FirebaseFirestore.instance
-          .collection('resultados_analisis_compactacion')
-          .where('unidad', isEqualTo: unidad)
-          .where('seccion', isEqualTo: seccionValor)
-          .orderBy('fecha', descending: true)
-          .orderBy('updatedAt', descending: true)
-          .limit(1);
+    final col = FirebaseFirestore.instance
+        .collection('resultados_analisis_compactacion');
 
-      try {
-        return await query.get();
-      } on FirebaseException catch (e) {
-        if (e.code == 'failed-precondition') {
-          try {
-            return await FirebaseFirestore.instance
-                .collection('resultados_analisis_compactacion')
-                .where('unidad', isEqualTo: unidad)
-                .where('seccion', isEqualTo: seccionValor)
-                .orderBy('updatedAt', descending: true)
-                .limit(1)
-                .get();
-          } on FirebaseException catch (inner) {
-            if (inner.code == 'failed-precondition') {
-              return FirebaseFirestore.instance
-                  .collection('resultados_analisis_compactacion')
-                  .where('unidad', isEqualTo: unidad)
-                  .where('seccion', isEqualTo: seccionValor)
-                  .limit(1)
-                  .get();
-            }
-            rethrow;
-          }
-        }
-        rethrow;
+    final inValues = _seccionCandidatos(seccionId);
+    Query<Map<String, dynamic>> q = col
+        .where('unidad', isEqualTo: unidad)
+        .where('seccion', whereIn: inValues.take(10).toList())
+        .orderBy('fecha', descending: true)
+        .limit(1);
+
+    try {
+      final snap = await q.get();
+
+      final docs = snap.docs;
+      if (docs.isEmpty) {
+        // ignore: avoid_print
+        print('[PrepSuelos] Sin docs. unidad=$unidad seccionId=$seccionId candidatos=$inValues');
+
+        final alt1 = await col
+            .where('unidad', isEqualTo: unidad)
+            .where('seccion', isEqualTo: 'Sección $seccionId')
+            .orderBy('fecha', descending: true)
+            .limit(1)
+            .get();
+        if (alt1.docs.isNotEmpty) return _mapDoc(alt1.docs.first);
+
+        final alt2 = await col
+            .where('unidad', isEqualTo: unidad)
+            .where('seccion', isEqualTo: seccionId)
+            .orderBy('fecha', descending: true)
+            .limit(1)
+            .get();
+        if (alt2.docs.isNotEmpty) return _mapDoc(alt2.docs.first);
+
+        return (
+          nombre: 'Sin archivo reciente',
+          storagePath: null,
+          fecha: null,
+          barraTexto: 'Sin recomendación disponible',
+          barraColor: _EstadoColor.desconocido,
+        );
       }
-    }
 
-    QuerySnapshot<Map<String, dynamic>> snap = await ejecutar(seccionId);
-    if (snap.docs.isEmpty) {
-      final asInt = int.tryParse(seccionId);
-      if (asInt != null) {
-        snap = await ejecutar(asInt);
-      }
-    }
-
-    if (snap.docs.isEmpty) {
+      return _mapDoc(docs.first);
+    } on FirebaseException catch (e) {
+      // ignore: avoid_print
+      print('[PrepSuelos][ERROR] ${e.message} | unidad=$unidad seccionId=$seccionId in=$inValues');
       return (
         nombre: 'Sin archivo reciente',
         storagePath: null,
@@ -572,51 +594,47 @@ class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
         barraColor: _EstadoColor.desconocido,
       );
     }
+  }
 
-    final data = snap.docs.first.data();
-    final fecha = _extraerFecha(data);
-    final rawRecomendacion = data['recomendacion'];
-    String? colorRaw;
-    String? textoRaw;
-    if (rawRecomendacion is Map<String, dynamic>) {
-      colorRaw = (rawRecomendacion['color'] as String?)?.toLowerCase().trim();
-      textoRaw = (rawRecomendacion['texto'] as String?)?.trim();
-    } else if (rawRecomendacion is String) {
-      textoRaw = rawRecomendacion.trim();
-    }
+  DatosSeccion _mapDoc(QueryDocumentSnapshot<Map<String, dynamic>> d) {
+    final m = d.data();
 
-    colorRaw ??= (data['color'] as String?)?.toLowerCase().trim();
-    colorRaw ??= (data['caso'] as String?)?.toLowerCase().trim();
+    final rec = (m['recomendacion'] ?? {}) as Map<String, dynamic>;
+    final color = _str(rec['color'])?.toLowerCase();
+    final barraColor = switch (color) {
+      'rojo' => _EstadoColor.rojo,
+      'amarillo' => _EstadoColor.amarillo,
+      'verde' => _EstadoColor.verde,
+      _ => _EstadoColor.desconocido,
+    };
+    final barraTexto = _str(rec['texto']) ?? 'Sin recomendación disponible';
 
-    textoRaw ??= (data['recomendacionTexto'] as String?)?.trim();
-    textoRaw ??= (data['recomendaciones'] as String?)?.trim();
-    final texto =
-        (textoRaw == null || textoRaw.isEmpty)
-            ? 'Sin recomendación disponible'
-            : textoRaw;
+    final arch = (m['archivo'] ?? {}) as Map<String, dynamic>;
+    final storagePath = _str(
+      arch['path'] ??
+          arch['storagePath'] ??
+          arch['storage_path'] ??
+          arch['ruta'],
+    )?.trim();
 
-    final nombreRaw = (data['nombre'] as String?)?.trim();
-    final nombreAlterno = (data['fileName'] as String?)?.trim();
-    final nombreArchivo =
-        (nombreRaw != null && nombreRaw.isNotEmpty)
-            ? nombreRaw
-            : (nombreAlterno != null && nombreAlterno.isNotEmpty
-                ? nombreAlterno
-                : null);
+    final nombreArchivo = _str(
+          arch['nombre'] ??
+              arch['fileName'] ??
+              arch['titulo'],
+        ) ??
+        'Sin archivo reciente';
 
-    final storagePathRaw = (data['storagePath'] as String?)?.trim();
-    final downloadUrl = (data['downloadUrl'] as String?)?.trim();
-    final storagePath =
-        (storagePathRaw != null && storagePathRaw.isNotEmpty)
-            ? storagePathRaw
-            : (downloadUrl != null && downloadUrl.isNotEmpty ? downloadUrl : null);
+    final fecha = _fecha(m['fecha']) ??
+        _fecha(arch['updatedAt']) ??
+        _fecha(arch['uploadedAt']) ??
+        _fecha(arch['actualizado']);
 
     return (
-      nombre: nombreArchivo ?? 'Sin archivo reciente',
-      storagePath: storagePath,
+      nombre: nombreArchivo,
+      storagePath: storagePath?.isEmpty == true ? null : storagePath,
       fecha: fecha,
-      barraTexto: texto,
-      barraColor: _estadoDesdeColor(colorRaw),
+      barraTexto: barraTexto,
+      barraColor: barraColor,
     );
   }
 
@@ -1506,21 +1524,6 @@ class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
     );
   }
 
-  DateTime? _extraerFecha(Map<String, dynamic> data) {
-    final fechaCampo = data['fecha'];
-    if (fechaCampo is Timestamp) {
-      return fechaCampo.toDate();
-    }
-    if (fechaCampo is String) {
-      final parsed = DateTime.tryParse(fechaCampo);
-      if (parsed != null) {
-        return parsed;
-      }
-    }
-    return (data['updatedAt'] as Timestamp?)?.toDate() ??
-        (data['createdAt'] as Timestamp?)?.toDate();
-  }
-
   Widget _barraRecomendacion(_EstadoColor estado, String texto) {
     final color = _colorParaEstado(estado);
     return Container(
@@ -1568,26 +1571,6 @@ class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
         const SnackBar(content: Text('No se pudo abrir el documento.')),
       );
     }
-  }
-
-  _EstadoColor _estadoDesdeColor(String? color) {
-    switch (color) {
-      case 'verde':
-        return _EstadoColor.verde;
-      case 'amarillo':
-        return _EstadoColor.amarillo;
-      case 'rojo':
-        return _EstadoColor.rojo;
-      default:
-        return _EstadoColor.desconocido;
-    }
-  }
-
-  DateTime? _fechaDesdeDynamic(dynamic v) {
-    if (v == null) return null;
-    if (v is Timestamp) return v.toDate();
-    if (v is DateTime) return v;
-    return DateTime.tryParse(v.toString());
   }
 
   String _nombreSeleccion(String raw) {
