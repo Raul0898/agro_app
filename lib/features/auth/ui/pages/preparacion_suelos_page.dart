@@ -173,6 +173,24 @@ DateTime? _fecha(dynamic v) {
   return DateTime.tryParse(v.toString());
 }
 
+Map<String, dynamic> _asSD(dynamic raw) {
+  if (raw is Map) {
+    final result = <String, dynamic>{};
+    raw.forEach((key, value) {
+      if (key == null) return;
+      result[key.toString()] = value;
+    });
+    return result;
+  }
+  return const <String, dynamic>{};
+}
+
+Map<String, dynamic> _docData(DocumentSnapshot<Map<String, dynamic>> doc) {
+  final data = doc.data();
+  if (data == null) return const <String, dynamic>{};
+  return _asSD(data);
+}
+
 class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
   bool _loading = true;
   String? _error;
@@ -597,37 +615,71 @@ class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
   }
 
   DatosSeccion _mapDoc(QueryDocumentSnapshot<Map<String, dynamic>> d) {
-    final m = d.data();
+    final m = _docData(d);
 
-    final rec = (m['recomendacion'] ?? {}) as Map<String, dynamic>;
-    final color = _str(rec['color'])?.toLowerCase();
+    final rec = _asSD(
+      m['recomendacion'] ??
+          m['recomendación'] ??
+          m['recommendacion'] ??
+          m['recommendation'] ??
+          m['reporte'] ??
+          m['resultado'],
+    );
+    final color = _str(
+      rec['color'] ?? rec['estado'] ?? rec['nivel'] ?? rec['barraColor'],
+    )?.toLowerCase();
     final barraColor = switch (color) {
       'rojo' => _EstadoColor.rojo,
       'amarillo' => _EstadoColor.amarillo,
       'verde' => _EstadoColor.verde,
       _ => _EstadoColor.desconocido,
     };
-    final barraTexto = _str(rec['texto']) ?? 'Sin recomendación disponible';
+    final barraTexto = _str(
+          rec['texto'] ??
+              rec['descripcion'] ??
+              rec['descripción'] ??
+              rec['mensaje'] ??
+              rec['label'],
+        ) ??
+        'Sin recomendación disponible';
 
-    final arch = (m['archivo'] ?? {}) as Map<String, dynamic>;
+    final arch = _asSD(
+      m['archivo'] ??
+          m['archivoAdjunto'] ??
+          m['archivo_adjunto'] ??
+          m['reporteArchivo'] ??
+          m['reporte_archivo'] ??
+          m['file'] ??
+          m['documento'],
+    );
     final storagePath = _str(
       arch['path'] ??
           arch['storagePath'] ??
           arch['storage_path'] ??
-          arch['ruta'],
+          arch['ruta'] ??
+          arch['url'],
     )?.trim();
 
     final nombreArchivo = _str(
           arch['nombre'] ??
               arch['fileName'] ??
-              arch['titulo'],
+              arch['titulo'] ??
+              arch['title'],
         ) ??
         'Sin archivo reciente';
 
     final fecha = _fecha(m['fecha']) ??
+        _fecha(m['fechaReporte']) ??
+        _fecha(m['fecha_reporte']) ??
+        _fecha(m['createdAt']) ??
+        _fecha(m['updatedAt']) ??
+        _fecha(rec['fecha']) ??
+        _fecha(rec['fechaReporte']) ??
+        _fecha(rec['fecha_reporte']) ??
         _fecha(arch['updatedAt']) ??
         _fecha(arch['uploadedAt']) ??
-        _fecha(arch['actualizado']);
+        _fecha(arch['actualizado']) ??
+        _fecha(arch['fecha']);
 
     return (
       nombre: nombreArchivo,
