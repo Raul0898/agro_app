@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_storage/firebase_storage.dart' as fb_storage;
 import 'package:flutter/material.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:intl/intl.dart';
@@ -24,59 +25,95 @@ class _SeccionInfo {
   final String id;
 }
 
-class _SeccionResultado {
-  const _SeccionResultado({
-    required this.info,
-    this.doc,
-    required this.color,
-    required this.texto,
-    this.nombre,
-    this.fecha,
-    this.url,
+class _ArchivoStorageInfo {
+  const _ArchivoStorageInfo({
+    required this.nombre,
+    required this.fecha,
+    required this.url,
+    required this.metadata,
   });
 
-  final _SeccionInfo info;
-  final DocumentSnapshot<Map<String, dynamic>>? doc;
-  final _EstadoColor color;
-  final String texto;
-  final String? nombre;
+  final String nombre;
   final DateTime? fecha;
-  final String? url;
-
-  bool get tieneDocumento => doc != null;
+  final String url;
+  final fb_storage.FullMetadata metadata;
 }
 
-class _DecisionProfundoState {
-  const _DecisionProfundoState({
+class _RecomendacionInfo {
+  const _RecomendacionInfo({
+    required this.color,
+    required this.texto,
+    this.doc,
+    this.fecha,
+  });
+
+  final _EstadoColor color;
+  final String texto;
+  final DocumentSnapshot<Map<String, dynamic>>? doc;
+  final DateTime? fecha;
+}
+
+class _DecisionSeccionState {
+  const _DecisionSeccionState({
     required this.docId,
+    required this.seccionId,
     required this.decision,
-    required this.fuente,
+    this.fuente,
     this.createdAt,
     this.updatedAt,
     this.reporteEmitidoAt,
+    this.expiresAt,
   });
 
   final String docId;
+  final String seccionId;
   final String? decision;
   final String? fuente;
   final DateTime? createdAt;
   final DateTime? updatedAt;
   final DateTime? reporteEmitidoAt;
+  final DateTime? expiresAt;
 
   bool get reporteVigente => _isWithinSixMonths(reporteEmitidoAt);
+  bool get vigente =>
+      expiresAt == null || expiresAt!.isAfter(DateTime.now());
 
-  factory _DecisionProfundoState.fromSnapshot(
+  factory _DecisionSeccionState.fromSnapshot(
     DocumentSnapshot<Map<String, dynamic>> snap,
   ) {
     final data = snap.data() ?? <String, dynamic>{};
-    return _DecisionProfundoState(
+    final seccionRaw = data['seccion'] ?? data['seccionId'] ?? data['seccion_id'];
+    final seccionId = _normalizarSeccionIdStatic(seccionRaw) ?? '';
+    return _DecisionSeccionState(
       docId: snap.id,
+      seccionId: seccionId,
       decision: (data['decision'] as String?)?.trim(),
       fuente: (data['fuente'] as String?)?.trim(),
       createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
       updatedAt: (data['updatedAt'] as Timestamp?)?.toDate(),
       reporteEmitidoAt: (data['reporteEmitidoAt'] as Timestamp?)?.toDate(),
+      expiresAt: (data['expiresAt'] as Timestamp?)?.toDate(),
     );
+  }
+
+  static String? _normalizarSeccionIdStatic(dynamic entry) {
+    if (entry is String) {
+      final trimmed = entry.trim();
+      if (trimmed.isEmpty) return null;
+      final match = RegExp(r'(\d+)').firstMatch(trimmed);
+      if (match != null) {
+        return match.group(1);
+      }
+      return trimmed;
+    }
+    if (entry is num) {
+      final normalized = entry.toString().trim();
+      return normalized.isEmpty ? null : normalized;
+    }
+    if (entry is DocumentReference) {
+      return entry.id.trim();
+    }
+    return null;
   }
 }
 
@@ -141,9 +178,13 @@ class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
   String? _unidadId;
 
   List<_SeccionInfo> _secciones = const [];
-  final Map<String, _SeccionResultado> _resultados = {};
-  _DecisionProfundoState? _decision;
-  bool _guardandoDecision = false;
+  final Map<String, _ArchivoStorageInfo?> _archivosPorSeccion = {};
+  final Map<String, _RecomendacionInfo?> _recomendacionesPorSeccion = {};
+  final Map<String, _DecisionSeccionState> _decisionPorSeccion = {};
+  bool _hayRojo = false;
+  bool _hayAmarillo = false;
+  final Set<String> _guardandoDecisionSecciones = <String>{};
+  final Set<String> _eliminandoDecisionSecciones = <String>{};
 
   List<_ActividadSuperficialRegistro> _superficiales = const [];
   bool _agregandoSuperficial = false;
@@ -181,12 +222,24 @@ class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
     try {
       final unidad = await _resolverUnidad(uid);
       final secciones = await _resolverSecciones(unidad);
-      final resultados = <String, _SeccionResultado>{};
+      final archivos = <String, _ArchivoStorageInfo?>{};
+      final recomendaciones = <String, _RecomendacionInfo?>{};
+      bool hayRojo = false;
+      bool hayAmarillo = false;
       for (final seccion in secciones) {
-        final resultado = await _cargarResultado(unidad, seccion);
-        resultados[seccion.id] = resultado;
+        final archivo = await _ultimoArchivoStorage(unidad, seccion);
+        archivos[seccion.id] = archivo;
+        final recomendacion = await _recomendacion(unidad, seccion);
+        recomendaciones[seccion.id] = recomendacion;
+        if (recomendacion != null) {
+          if (recomendacion.color == _EstadoColor.rojo) {
+            hayRojo = true;
+          } else if (recomendacion.color == _EstadoColor.amarillo) {
+            hayAmarillo = true;
+          }
+        }
       }
-      final decision = await _cargarDecision(uid, unidad);
+      final decisiones = await _cargarDecisiones(uid, unidad);
       final superficiales = await _cargarActividades(uid, unidad);
 
       if (!mounted) return;
@@ -194,10 +247,17 @@ class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
         _uid = uid;
         _unidadId = unidad;
         _secciones = secciones;
-        _resultados
+        _archivosPorSeccion
           ..clear()
-          ..addAll(resultados);
-        _decision = decision;
+          ..addAll(archivos);
+        _recomendacionesPorSeccion
+          ..clear()
+          ..addAll(recomendaciones);
+        _decisionPorSeccion
+          ..clear()
+          ..addAll(decisiones);
+        _hayRojo = hayRojo;
+        _hayAmarillo = !hayRojo && hayAmarillo;
         _superficiales = superficiales;
         _superficialesNuevos.removeWhere(
           (id) => superficiales.every((registro) => registro.docId != id),
@@ -349,24 +409,24 @@ class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
 
     final seccionesDesdeLista = _mapearSeccionesDesdeLista(data['secciones']);
     if (seccionesDesdeLista.isNotEmpty) {
-      return seccionesDesdeLista;
+      return _ordenarSecciones(seccionesDesdeLista);
     }
 
     final count = _intFromDynamic(data['seccionesCount']) ??
         _intFromDynamic(data['num_secciones']) ??
         _intFromDynamic(data['numSecciones']);
     if (count != null && count > 0) {
-      return List<_SeccionInfo>.generate(
+      return _ordenarSecciones(List<_SeccionInfo>.generate(
         count,
         (index) => _SeccionInfo(
           id: '${index + 1}',
         ),
-      );
+      ));
     }
 
-    return const <_SeccionInfo>[
+    return _ordenarSecciones(const <_SeccionInfo>[
       _SeccionInfo(id: '1'),
-    ];
+    ]);
   }
 
   List<_SeccionInfo> _mapearSeccionesDesdeLista(dynamic raw) {
@@ -381,6 +441,40 @@ class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
       }
     }
     return resultado;
+  }
+
+  List<_SeccionInfo> _ordenarSecciones(List<_SeccionInfo> secciones) {
+    final lista = List<_SeccionInfo>.from(secciones);
+    lista.sort((a, b) {
+      final ai = int.tryParse(a.id);
+      final bi = int.tryParse(b.id);
+      if (ai != null && bi != null) {
+        return ai.compareTo(bi);
+      }
+      if (ai != null) return -1;
+      if (bi != null) return 1;
+      return a.id.compareTo(b.id);
+    });
+    return lista;
+  }
+
+  String _labelSeccion(_SeccionInfo seccion) => 'Sección ${seccion.id}';
+
+  String? _idStorage(_SeccionInfo seccion) {
+    final id = seccion.id.trim();
+    if (id.isEmpty) return null;
+    return _sanitizeStorageSegment(id);
+  }
+
+  String _sanitizeStorageSegment(String input) {
+    final s = input
+        .trim()
+        .toLowerCase()
+        .replaceAll(RegExp(r'[\\/]+'), '-')
+        .replaceAll(RegExp(r'[^a-z0-9_\-\s]'), '')
+        .replaceAll(RegExp(r'\s+'), '_')
+        .replaceAll(RegExp(r'_+'), '_');
+    return s.isEmpty ? 'na' : s;
   }
 
   String? _normalizarSeccionId(dynamic entry) {
@@ -437,12 +531,83 @@ class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
     return null;
   }
 
-  Future<_SeccionResultado> _cargarResultado(
+  Future<_ArchivoStorageInfo?> _ultimoArchivoStorage(
     String unidad,
     _SeccionInfo seccion,
   ) async {
-    Future<QuerySnapshot<Map<String, dynamic>>> ejecutarConsulta(
-        dynamic seccionValor) async {
+    final unidadStorage = _sanitizeStorageSegment(unidad);
+    final seccionStorage = _idStorage(seccion);
+    if (seccionStorage == null || seccionStorage.isEmpty) {
+      return null;
+    }
+    final year = DateTime.now().year.toString();
+    final path =
+        'unidades_info/$unidadStorage/analisis_suelo/analisis/analisis_compactacion/$seccionStorage/$year';
+    try {
+      final ref = fb_storage.FirebaseStorage.instance.ref(path);
+      final listado = await ref.listAll();
+      if (listado.items.isEmpty) {
+        return null;
+      }
+      _ArchivoStorageInfo? seleccionado;
+      DateTime? referenciaSeleccionado;
+      for (final item in listado.items) {
+        final info = await _infoArchivo(item);
+        if (info == null) continue;
+        final referencia = info.fecha ??
+            info.metadata.updated ??
+            info.metadata.timeCreated;
+        if (seleccionado == null) {
+          seleccionado = info;
+          referenciaSeleccionado = referencia;
+          continue;
+        }
+        final actual = referencia ?? DateTime.fromMillisecondsSinceEpoch(0);
+        final previo = referenciaSeleccionado ??
+            DateTime.fromMillisecondsSinceEpoch(0);
+        if (actual.isAfter(previo)) {
+          seleccionado = info;
+          referenciaSeleccionado = referencia;
+        }
+      }
+      return seleccionado;
+    } on fb_storage.FirebaseException catch (_) {
+      return null;
+    }
+  }
+
+  Future<_ArchivoStorageInfo?> _infoArchivo(
+    fb_storage.Reference ref,
+  ) async {
+    try {
+      final metadata = await ref.getMetadata();
+      final url = await ref.getDownloadURL();
+      final custom = metadata.customMetadata ?? <String, String>{};
+      final nombreCustom = custom['nombre'] ??
+          custom['fileName'] ??
+          custom['nombreArchivo'];
+      final nombre = (nombreCustom != null && nombreCustom.trim().isNotEmpty)
+          ? nombreCustom.trim()
+          : (metadata.name?.trim().isNotEmpty == true
+              ? metadata.name!.trim()
+              : ref.name.trim());
+      final fecha = metadata.timeCreated ?? metadata.updated;
+      return _ArchivoStorageInfo(
+        nombre: nombre,
+        fecha: fecha,
+        url: url,
+        metadata: metadata,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<_RecomendacionInfo?> _recomendacion(
+    String unidad,
+    _SeccionInfo seccion,
+  ) async {
+    Future<QuerySnapshot<Map<String, dynamic>>> ejecutar(dynamic seccionValor) async {
       Query<Map<String, dynamic>> query = FirebaseFirestore.instance
           .collection('resultados_analisis_compactacion')
           .where('unidad', isEqualTo: unidad)
@@ -480,43 +645,40 @@ class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
     }
 
     QuerySnapshot<Map<String, dynamic>> snap =
-        await ejecutarConsulta(seccion.id);
+        await ejecutar(seccion.id);
     if (snap.docs.isEmpty) {
       final asInt = int.tryParse(seccion.id);
       if (asInt != null) {
-        snap = await ejecutarConsulta(asInt);
+        snap = await ejecutar(asInt);
       }
     }
 
-    final doc = snap.docs.isNotEmpty ? snap.docs.first : null;
-    final data = doc?.data() ?? <String, dynamic>{};
+    if (snap.docs.isEmpty) {
+      return null;
+    }
+    final doc = snap.docs.first;
+    final data = doc.data();
     final rawRecomendacion = data['recomendacion'];
     final recomendacion = rawRecomendacion is Map<String, dynamic>
         ? rawRecomendacion
         : <String, dynamic>{};
     final colorRaw = (recomendacion['color'] as String?)?.toLowerCase().trim();
+    final textoRaw = (recomendacion['texto'] as String?)?.trim();
     final texto =
-        (recomendacion['texto'] as String?)?.trim() ?? 'Sin recomendación disponible';
-    final nombre = (data['nombreArchivo'] as String?) ??
-        (data['nombre'] as String?) ??
-        (data['titulo'] as String?);
-    final url = (data['urlPdf'] as String?) ??
-        (data['url'] as String?) ??
-        (data['downloadUrl'] as String?);
+        (textoRaw == null || textoRaw.isEmpty)
+            ? 'Sin recomendación disponible'
+            : textoRaw;
     final fecha = _extraerFecha(data);
 
-    return _SeccionResultado(
-      info: seccion,
-      doc: doc,
+    return _RecomendacionInfo(
       color: _estadoDesdeColor(colorRaw),
-      texto: texto.isEmpty ? 'Sin recomendación disponible' : texto,
-      nombre: nombre,
+      texto: texto,
+      doc: doc,
       fecha: fecha,
-      url: url,
     );
   }
 
-  Future<_DecisionProfundoState?> _cargarDecision(
+  Future<Map<String, _DecisionSeccionState>> _cargarDecisiones(
     String uid,
     String unidad,
   ) async {
@@ -524,11 +686,25 @@ class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
         .collection('decisiones_laboreo_profundo')
         .where('uid', isEqualTo: uid)
         .where('unidad', isEqualTo: unidad)
-        .orderBy('createdAt', descending: true)
-        .limit(1)
         .get();
-    if (snap.docs.isEmpty) return null;
-    return _DecisionProfundoState.fromSnapshot(snap.docs.first);
+    final Map<String, _DecisionSeccionState> resultado = {};
+    for (final doc in snap.docs) {
+      final estado = _DecisionSeccionState.fromSnapshot(doc);
+      if (estado.seccionId.isEmpty) continue;
+      if (!estado.vigente) continue;
+      final existente = resultado[estado.seccionId];
+      if (existente == null) {
+        resultado[estado.seccionId] = estado;
+        continue;
+      }
+      final fechaExistente = existente.updatedAt ?? existente.createdAt;
+      final fechaNueva = estado.updatedAt ?? estado.createdAt;
+      if (fechaNueva != null &&
+          (fechaExistente == null || fechaNueva.isAfter(fechaExistente))) {
+        resultado[estado.seccionId] = estado;
+      }
+    }
+    return resultado;
   }
 
   Future<List<_ActividadSuperficialRegistro>> _cargarActividades(
@@ -545,12 +721,6 @@ class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
         .map(_ActividadSuperficialRegistro.fromSnapshot)
         .toList(growable: false);
   }
-
-  bool get _hayRojo =>
-      _resultados.values.any((resultado) => resultado.color == _EstadoColor.rojo);
-
-  bool get _hayAmarillo => !_hayRojo &&
-      _resultados.values.any((resultado) => resultado.color == _EstadoColor.amarillo);
 
   @override
   Widget build(BuildContext context) {
@@ -619,26 +789,36 @@ class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
         const SizedBox(height: 12),
         if (_secciones.isEmpty)
           _placeholderCard('No hay secciones registradas para la unidad.'),
-        for (final seccion in _secciones)
-          _seccionCard(_resultados[seccion.id] ?? _SeccionResultado(
-            info: seccion,
-            color: _EstadoColor.desconocido,
-            texto: 'Sin información disponible',
-          )),
-        const SizedBox(height: 16),
-        if (_hayRojo) _bloqueRojo(),
-        if (!_hayRojo && _hayAmarillo) _bloqueAmarillo(),
+        for (final seccion in _secciones) _buildCardSeccion(seccion),
+        if (_hayRojo) ...[
+          const SizedBox(height: 16),
+          Text(
+            'Se detectaron secciones en rojo. Revisa el manual y registra la actividad necesaria.',
+            style: theme.textTheme.bodyMedium,
+          ),
+        ] else if (_hayAmarillo) ...[
+          const SizedBox(height: 16),
+          Text(
+            'Algunas secciones requieren decisión. Selecciona una opción para continuar.',
+            style: theme.textTheme.bodyMedium,
+          ),
+        ],
       ],
     );
   }
-
-  Widget _seccionCard(_SeccionResultado resultado) {
+ 
+  Widget _buildCardSeccion(_SeccionInfo seccion) {
     final theme = Theme.of(context);
-    final fecha = resultado.fecha;
-    final fechaTexto = fecha == null
+    final archivo = _archivosPorSeccion[seccion.id];
+    final recomendacion = _recomendacionesPorSeccion[seccion.id];
+    final estado = recomendacion?.color ?? _EstadoColor.desconocido;
+    final texto = recomendacion?.texto ?? 'Sin recomendación disponible';
+    final fechaBase = archivo?.fecha ?? recomendacion?.fecha;
+    final fechaTexto = fechaBase == null
         ? 'Sin fecha disponible'
-        : DateFormat('dd/MM/yyyy', 'es_MX').format(fecha);
-    final nombre = resultado.nombre ?? 'Documento sin nombre';
+        : DateFormat('dd/MM/yyyy', 'es_MX').format(fechaBase);
+    final nombreArchivo = archivo?.nombre ?? 'Sin archivo reciente';
+    final url = archivo?.url;
 
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 8),
@@ -649,8 +829,7 @@ class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
           children: [
             Row(
               children: [
-                Text('Sección ${resultado.info.id}',
-                    style: theme.textTheme.titleMedium),
+                Text(_labelSeccion(seccion), style: theme.textTheme.titleMedium),
                 const Spacer(),
                 Icon(Icons.segment, color: theme.colorScheme.primary),
               ],
@@ -659,48 +838,57 @@ class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
             Text('Fecha: $fechaTexto', style: theme.textTheme.bodySmall),
             const SizedBox(height: 6),
             Text(
-              nombre,
+              nombreArchivo,
               style: theme.textTheme.bodyMedium?.copyWith(
                 fontWeight: FontWeight.w600,
               ),
             ),
+            if (archivo == null) ...[
+              const SizedBox(height: 4),
+              Text(
+                'No se encontraron archivos en Storage para el año actual.',
+                style: theme.textTheme.bodySmall,
+              ),
+            ],
             const SizedBox(height: 12),
-            _barraRecomendacion(resultado.color, resultado.texto),
+            _barraRecomendacion(estado, texto),
             const SizedBox(height: 12),
             Align(
               alignment: Alignment.centerRight,
               child: TextButton.icon(
-                onPressed: resultado.url == null
-                    ? null
-                    : () => _abrirUrl(resultado.url!),
+                onPressed: url == null ? null : () => _abrirUrl(url),
                 icon: const Icon(Icons.visibility_outlined),
                 label: const Text('Vista previa'),
               ),
             ),
+            if (estado == _EstadoColor.rojo) ...[
+              const SizedBox(height: 12),
+              _manualPlaceholder(),
+              const SizedBox(height: 12),
+              Align(
+                alignment: Alignment.centerRight,
+                child: _reporteProfundoButton(
+                  seccion: seccion,
+                  fuente: 'rojo',
+                ),
+              ),
+            ] else if (estado == _EstadoColor.amarillo) ...[
+              const SizedBox(height: 12),
+              _decisionWidgetSeccion(seccion),
+            ],
           ],
         ),
       ),
     );
   }
 
-  Widget _bloqueRojo() {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _manualPlaceholder(),
-            const SizedBox(height: 12),
-            _reporteProfundoButton(fuente: 'rojo'),
-          ],
-        ),
-      ),
-    );
-  }
+  Widget _decisionWidgetSeccion(_SeccionInfo seccion) {
+    final guardando = _guardandoDecisionSecciones.contains(seccion.id);
+    final eliminando = _eliminandoDecisionSecciones.contains(seccion.id);
+    final decisionState = _decisionPorSeccion[seccion.id];
+    final decision = decisionState?.decision?.trim();
 
-  Widget _bloqueAmarillo() {
-    if (_guardandoDecision) {
+    if (guardando || eliminando) {
       return const Center(
         child: Padding(
           padding: EdgeInsets.all(12),
@@ -709,13 +897,12 @@ class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
       );
     }
 
-    final decision = _decision?.decision;
-    if (decision == null) {
+    if (decision == null || decision.isEmpty) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Se detectaron secciones en amarillo. Selecciona la acción a realizar y se guardará para futuras sesiones.',
+            'Selecciona la acción a realizar y se guardará para futuras sesiones.',
             style: Theme.of(context).textTheme.bodyMedium,
           ),
           const SizedBox(height: 12),
@@ -737,7 +924,7 @@ class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
             ),
             onChanged: (value) {
               if (value != null) {
-                _guardarDecision(value, 'amarillo');
+                _guardarDecisionSeccion(seccion, value, fuente: 'amarillo');
               }
             },
           ),
@@ -769,7 +956,7 @@ class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
           Align(
             alignment: Alignment.centerRight,
             child: TextButton(
-              onPressed: _revertirDecision,
+              onPressed: () => _eliminarDecisionSeccion(seccion),
               child: const Text('Tomar otra decisión'),
             ),
           ),
@@ -782,12 +969,12 @@ class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
       children: [
         _manualPlaceholder(),
         const SizedBox(height: 12),
-        _reporteProfundoButton(fuente: 'amarillo'),
+        _reporteProfundoButton(seccion: seccion, fuente: 'amarillo'),
         const SizedBox(height: 8),
         Align(
           alignment: Alignment.centerRight,
           child: TextButton(
-            onPressed: _revertirDecision,
+            onPressed: () => _eliminarDecisionSeccion(seccion),
             child: const Text('Tomar otra decisión'),
           ),
         ),
@@ -795,12 +982,16 @@ class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
     );
   }
 
-  Widget _reporteProfundoButton({required String fuente}) {
-    final bool mostrarPalomita = _decision?.reporteVigente ?? false;
+  Widget _reporteProfundoButton({
+    required _SeccionInfo seccion,
+    required String fuente,
+  }) {
+    final decision = _decisionPorSeccion[seccion.id];
+    final bool mostrarPalomita = decision?.reporteVigente ?? false;
     return Row(
       children: [
         FilledButton.icon(
-          onPressed: () => _abrirReporteProfundo(fuente),
+          onPressed: () => _abrirReporteProfundo(seccion, fuente),
           icon: const Icon(Icons.assignment_outlined),
           label: const Text('Reporte de Actividad'),
         ),
@@ -967,21 +1158,26 @@ class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
     );
   }
 
-  Future<void> _guardarDecision(String decision, String fuente) async {
+  Future<void> _guardarDecisionSeccion(
+    _SeccionInfo seccion,
+    String decision, {
+    required String fuente,
+  }) async {
     if (_uid == null || _unidadId == null) return;
-    setState(() => _guardandoDecision = true);
+    final seccionId = seccion.id;
+    setState(() {
+      _guardandoDecisionSecciones.add(seccionId);
+    });
     try {
       final ref = FirebaseFirestore.instance
           .collection('decisiones_laboreo_profundo');
-      late final DocumentReference<Map<String, dynamic>> docRef;
-      if (_decision != null) {
-        docRef = ref.doc(_decision!.docId);
-      } else {
-        docRef = ref.doc();
-      }
+      final existente = _decisionPorSeccion[seccionId];
+      final docRef =
+          existente != null ? ref.doc(existente.docId) : ref.doc();
       final data = <String, dynamic>{
         'uid': _uid!,
         'unidad': _unidadId!,
+        'seccion': seccionId,
         'decision': decision,
         'fuente': fuente,
         'updatedAt': FieldValue.serverTimestamp(),
@@ -989,39 +1185,48 @@ class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
           DateTime.now().add(const Duration(days: 180)),
         ),
       };
-      if (_decision == null) {
+      if (existente == null) {
         data['createdAt'] = FieldValue.serverTimestamp();
       }
       await docRef.set(data, SetOptions(merge: true));
       final snap = await docRef.get();
+      final nuevo = _DecisionSeccionState.fromSnapshot(snap);
       if (!mounted) return;
       setState(() {
-        _decision = _DecisionProfundoState.fromSnapshot(snap);
-        _guardandoDecision = false;
+        _decisionPorSeccion[seccionId] = nuevo;
       });
     } catch (e) {
       if (!mounted) return;
-      setState(() => _guardandoDecision = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('No se pudo guardar la decisión: $e')),
       );
+    } finally {
+      if (!mounted) return;
+      setState(() {
+        _guardandoDecisionSecciones.remove(seccionId);
+      });
     }
   }
 
-  Future<void> _registrarReporteProfundo(String fuente) async {
+  Future<void> _registrarReporteProfundo(
+    _SeccionInfo seccion,
+    String fuente,
+  ) async {
     if (_uid == null || _unidadId == null) return;
+    final seccionId = seccion.id;
+    setState(() {
+      _guardandoDecisionSecciones.add(seccionId);
+    });
     try {
       final ref = FirebaseFirestore.instance
           .collection('decisiones_laboreo_profundo');
-      late final DocumentReference<Map<String, dynamic>> docRef;
-      if (_decision != null) {
-        docRef = ref.doc(_decision!.docId);
-      } else {
-        docRef = ref.doc();
-      }
+      final existente = _decisionPorSeccion[seccionId];
+      final docRef =
+          existente != null ? ref.doc(existente.docId) : ref.doc();
       final data = <String, dynamic>{
         'uid': _uid!,
         'unidad': _unidadId!,
+        'seccion': seccionId,
         'decision': 'realizar',
         'fuente': fuente,
         'reporteEmitidoAt': FieldValue.serverTimestamp(),
@@ -1030,42 +1235,54 @@ class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
           DateTime.now().add(const Duration(days: 180)),
         ),
       };
-      if (_decision == null) {
+      if (existente == null) {
         data['createdAt'] = FieldValue.serverTimestamp();
       }
       await docRef.set(data, SetOptions(merge: true));
       final snap = await docRef.get();
+      final nuevo = _DecisionSeccionState.fromSnapshot(snap);
       if (!mounted) return;
       setState(() {
-        _decision = _DecisionProfundoState.fromSnapshot(snap);
+        _decisionPorSeccion[seccionId] = nuevo;
       });
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('No se pudo registrar la actividad: $e')),
       );
+    } finally {
+      if (!mounted) return;
+      setState(() {
+        _guardandoDecisionSecciones.remove(seccionId);
+      });
     }
   }
 
-  Future<void> _revertirDecision() async {
-    if (_uid == null || _unidadId == null || _decision == null) return;
-    setState(() => _guardandoDecision = true);
+  Future<void> _eliminarDecisionSeccion(_SeccionInfo seccion) async {
+    final existente = _decisionPorSeccion[seccion.id];
+    if (existente == null) return;
+    setState(() {
+      _eliminandoDecisionSecciones.add(seccion.id);
+    });
     try {
       await FirebaseFirestore.instance
           .collection('decisiones_laboreo_profundo')
-          .doc(_decision!.docId)
+          .doc(existente.docId)
           .delete();
       if (!mounted) return;
       setState(() {
-        _decision = null;
-        _guardandoDecision = false;
+        _decisionPorSeccion.remove(seccion.id);
       });
     } catch (e) {
       if (!mounted) return;
-      setState(() => _guardandoDecision = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('No se pudo revertir la decisión: $e')),
       );
+    } finally {
+      if (!mounted) return;
+      setState(() {
+        _eliminandoDecisionSecciones.remove(seccion.id);
+      });
     }
   }
 
@@ -1143,14 +1360,17 @@ class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
     }
   }
 
-  Future<void> _abrirReporteProfundo(String fuente) async {
+  Future<void> _abrirReporteProfundo(
+    _SeccionInfo seccion,
+    String fuente,
+  ) async {
     final resultado = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
         builder: (_) => const ReporteActividadLaboreoProfundoPage(),
       ),
     );
     if (resultado == true) {
-      await _registrarReporteProfundo(fuente);
+      await _registrarReporteProfundo(seccion, fuente);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Actividad de laboreo profundo registrada.')),
