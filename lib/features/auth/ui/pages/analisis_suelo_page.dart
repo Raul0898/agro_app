@@ -3,7 +3,6 @@ import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show rootBundle;
-import 'package:flutter_pdfview/flutter_pdfview.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as p;
@@ -12,9 +11,10 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:intl/intl.dart';
-import 'package:http/http.dart' as http;
 
 import 'package:agro_app/core/firestore/repo_queries.dart';
+import 'package:agro_app/features/analisis/ui/widgets/repo_card_compaction.dart';
+import 'package:agro_app/features/analisis/ui/widgets/repo_pdf_viewer.dart';
 import 'package:agro_app/features/auth/ui/pages/analisis_compactacion_botton_page.dart';
 import 'package:agro_app/features/auth/ui/pages/reporte_actividad_form_page.dart';
 import 'package:agro_app/features/auth/ui/pages/reporte_actividad_nutrientes.dart';
@@ -315,7 +315,12 @@ class _AnalysisSoilPageState extends State<AnalysisSoilPage> {
     try {
       final tmp = await _assetToTempFile(assetPath);
       if (!mounted) return;
-      Navigator.of(context).push(MaterialPageRoute(builder: (_) => _PdfViewerPage(filePath: tmp.path)));
+      await Navigator.of(context).push(MaterialPageRoute(
+        builder: (_) => RepoPdfViewerPage(
+          filePath: tmp.path,
+          title: p.basename(assetPath),
+        ),
+      ));
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('No se pudo abrir el PDF: $e')));
@@ -324,7 +329,12 @@ class _AnalysisSoilPageState extends State<AnalysisSoilPage> {
 
   Future<void> _openLocalPdf(File file) async {
     if (!mounted) return;
-    Navigator.of(context).push(MaterialPageRoute(builder: (_) => _PdfViewerPage(filePath: file.path)));
+    await Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => RepoPdfViewerPage(
+        filePath: file.path,
+        title: p.basename(file.path),
+      ),
+    ));
   }
 
   @override
@@ -863,17 +873,12 @@ class _ArchiveResultsList extends StatelessWidget {
     return list;
   }
 
-  Color _casoColor(String? caso) {
-    switch (caso) { case 'verde': return const Color(0xFF2E7D32); case 'amarillo': return const Color(0xFFF9A825); case 'rojo': return const Color(0xFFC62828); default: return Colors.grey; }
-  }
-
-  String _safeFileName(String input) {
-    final s = input
-        .toLowerCase()
-        .replaceAll(RegExp(r'[^a-z0-9_\-\. ]+'), '') // quitar raros
-        .replaceAll(RegExp(r'\s+'), '_')             // espacios -> _
-        .replaceAll('__', '_');
-    return s.isEmpty ? 'reporte' : s;
+  Map<String, dynamic> _asStringMap(dynamic value) {
+    if (value is Map<String, dynamic>) return value;
+    if (value is Map) {
+      return value.map((key, val) => MapEntry(key.toString(), val));
+    }
+    return <String, dynamic>{};
   }
 
   @override
@@ -914,86 +919,107 @@ class _ArchiveResultsList extends StatelessWidget {
               final nombre = (data['nombre'] as String?) ?? 'Sin nombre';
               final encabezadoNombre = data['encabezado_nombre'] as String?;
               final fecha = (data['fecha'] as Timestamp?)?.toDate();
-              final fechaStr = fecha == null ? '' : DateFormat('yyyy-MM-dd HH:mm').format(fecha);
-              final url = data['downloadUrl'] as String?;
-              final storagePath = data['storagePath'] as String?;
-              final caso = data['caso'] as String?;
-
-              Future<String?> freshUrl() async {
-                if (storagePath == null || storagePath.isEmpty) return url;
-                try { return await FirebaseStorage.instance.ref(storagePath).getDownloadURL(); } catch (_) { return url; }
+              final url = (data['downloadUrl'] as String?)?.trim();
+              final storagePathRaw = (data['storagePath'] as String?)?.trim();
+              final storagePath =
+                  (storagePathRaw == null || storagePathRaw.isEmpty) ? null : storagePathRaw;
+              final rec = _asStringMap(data['recomendacion']);
+              final colorRaw = (rec['color'] ?? rec['estado'] ?? data['recomendacionColor'] ??
+                  data['color'] ?? data['estado'] ?? data['caso']);
+              final color = (colorRaw ?? '').toString().toLowerCase().trim();
+              final recTextoRaw =
+                  rec['texto'] ?? rec['mensaje'] ?? data['recomendacionTexto'] ?? data['texto'] ?? data['mensaje'];
+              final encabezadoTexto = (encabezadoNombre == null || encabezadoNombre.trim().isEmpty)
+                  ? ''
+                  : 'Nombre: $encabezadoNombre';
+              String texto = (recTextoRaw ?? '').toString().trim();
+              if (texto.isEmpty && encabezadoTexto.isNotEmpty) {
+                texto = encabezadoTexto;
+              } else if (texto.isNotEmpty && encabezadoTexto.isNotEmpty) {
+                texto = '$encabezadoTexto\n$texto';
               }
 
-              return Padding(
+              Future<String?> freshUrl() async {
+                if (storagePath != null && storagePath.isNotEmpty) {
+                  try {
+                    return await FirebaseStorage.instance.ref(storagePath).getDownloadURL();
+                  } catch (_) {
+                    return url;
+                  }
+                }
+                return url;
+              }
+
+              final hasSource =
+                  (storagePath != null && storagePath.isNotEmpty) || (url != null && url.isNotEmpty);
+
+              final repoItem = RepoItem(
+                titulo: nombre,
+                fecha: fecha,
+                storagePath: storagePath ?? url,
+                color: color.isEmpty ? 'desconocido' : color,
+                texto: texto,
+              );
+
+              return RepoCardCompaction(
+                item: repoItem,
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Row(children: [
-                    const Icon(Icons.picture_as_pdf, size: 20), const SizedBox(width: 8),
-                    Expanded(child: Text(nombre, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700))),
-                    if (caso != null) ...[
-                      const SizedBox(width: 8),
-                      Chip(label: Text(caso.toUpperCase(), style: const TextStyle(color: Colors.white)), backgroundColor: _casoColor(caso), visualDensity: VisualDensity.compact),
-                    ],
-                  ]),
-                  if (encabezadoNombre != null)
-                    Padding(padding: const EdgeInsets.only(top: 2), child: Text('Nombre: $encabezadoNombre', style: TextStyle(color: Colors.grey.shade800, fontSize: 12))),
-                  Text(fechaStr, style: TextStyle(color: Colors.grey.shade700, fontSize: 12)),
-                  const SizedBox(height: 6),
-                  Wrap(spacing: 8, runSpacing: 4, children: [
-                    OutlinedButton.icon(
-                      icon: const Icon(Icons.visibility_outlined, size: 18),
-                      label: const Text('Vista previa'),
-                      onPressed: () async { final u = await freshUrl(); if (u != null) await _openByUrl(context, u); },
-                    ),
-                    OutlinedButton.icon(
-                      icon: const Icon(Icons.download_outlined, size: 18),
-                      label: const Text('Descargar'),
-                      onPressed: () async { final u = await freshUrl(); if (u != null) await _downloadToDevice(context, u, suggestedName: _safeFileName(nombre)); },
-                    ),
-                    // Eliminar: Firestore + Storage
-                    TextButton.icon(
-                      icon: const Icon(Icons.delete_outline, size: 18, color: Colors.red),
-                      label: const Text('Eliminar', style: TextStyle(color: Colors.red)),
-                      onPressed: () async {
-                        final ok = await showDialog<bool>(
-                          context: context,
-                          builder: (_) => AlertDialog(
-                            title: const Text('Eliminar'),
-                            content: Text('¿Eliminar "$nombre"? Esta acción no se puede deshacer.\nSe borrará el registro (Firestore) y el archivo (Storage).'),
-                            actions: [
-                              TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancelar')),
-                              ElevatedButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('Eliminar')),
-                            ],
-                          ),
-                        );
-                        if (ok != true) return;
-
-                        try {
-                          // 1) Storage (si hay path)
-                          if (storagePath != null && storagePath.isNotEmpty) {
-                            await FirebaseStorage.instance.ref(storagePath).delete();
-                          }
-                          // 2) Firestore doc
-                          await refDoc.delete();
-
-                          // feedback
-                          if (!context.mounted) return;
-                          ScaffoldMessenger.of(context)
-                              .showSnackBar(const SnackBar(content: Text('Eliminado (Firestore + Storage)')));
-                        } on FirebaseException catch (e) {
-                          if (!context.mounted) return;
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('No se pudo eliminar: ${e.message ?? e.code}')),
-                          );
-                        } catch (e) {
-                          if (!context.mounted) return;
-                          ScaffoldMessenger.of(context)
-                              .showSnackBar(SnackBar(content: Text('No se pudo eliminar: $e')));
+                onPreview: hasSource
+                    ? () async {
+                        final fresh = await freshUrl();
+                        if (fresh != null) {
+                          await openRepoPdf(context, fresh, title: nombre);
                         }
-                      },
+                      }
+                    : null,
+                onDownload: hasSource
+                    ? () async {
+                        final fresh = await freshUrl();
+                        if (fresh != null) {
+                          await downloadRepoFile(
+                            context,
+                            fresh,
+                            suggestedName: sanitizeRepoFileName(nombre),
+                          );
+                        }
+                      }
+                    : null,
+                onDelete: () async {
+                  final ok = await showDialog<bool>(
+                    context: context,
+                    builder: (_) => AlertDialog(
+                      title: const Text('Eliminar'),
+                      content: Text(
+                        '¿Eliminar "$nombre"? Esta acción no se puede deshacer.\nSe borrará el registro (Firestore) y el archivo (Storage).',
+                      ),
+                      actions: [
+                        TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancelar')),
+                        ElevatedButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('Eliminar')),
+                      ],
                     ),
-                  ]),
-                ]),
+                  );
+                  if (ok != true) return;
+
+                  try {
+                    if (storagePath != null && storagePath.isNotEmpty) {
+                      await FirebaseStorage.instance.ref(storagePath).delete();
+                    }
+                    await refDoc.delete();
+
+                    if (!context.mounted) return;
+                    ScaffoldMessenger.of(context)
+                        .showSnackBar(const SnackBar(content: Text('Eliminado (Firestore + Storage)')));
+                  } on FirebaseException catch (e) {
+                    if (!context.mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('No se pudo eliminar: ${e.message ?? e.code}')),
+                    );
+                  } catch (e) {
+                    if (!context.mounted) return;
+                    ScaffoldMessenger.of(context)
+                        .showSnackBar(SnackBar(content: Text('No se pudo eliminar: $e')));
+                  }
+                },
               );
             },
           ),
@@ -1002,56 +1028,4 @@ class _ArchiveResultsList extends StatelessWidget {
     );
   }
 
-  // Helpers reutilizados del padre (copiados porque estamos en Stateless)
-  Future<void> _downloadToDevice(BuildContext context, String url, {required String suggestedName}) async {
-    try {
-      final resp = await http.get(Uri.parse(url));
-      if (resp.statusCode != 200) throw 'HTTP ${resp.statusCode}';
-      final file = File(p.join((await getApplicationDocumentsDirectory()).path, '$suggestedName.pdf'));
-      await file.writeAsBytes(resp.bodyBytes, flush: true);
-      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Descargado en: ${file.path}')));
-    } catch (e) {
-      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('No se pudo descargar: $e')));
-    }
-  }
-
-  Future<void> _openByUrl(BuildContext context, String url) async {
-    try {
-      final resp = await http.get(Uri.parse(url));
-      if (resp.statusCode != 200) throw 'HTTP ${resp.statusCode} al descargar el archivo';
-      final bytes = resp.bodyBytes;
-      if (bytes.isEmpty) throw 'El archivo descargado está vacío (0 bytes).';
-      if (bytes.length < 5 || String.fromCharCodes(bytes.take(5)) != '%PDF-') {
-        throw 'El archivo no es un PDF válido (no inicia con %PDF-).';
-      }
-      final file = File(p.join((await getTemporaryDirectory()).path, 'repo_${DateTime.now().millisecondsSinceEpoch}.pdf'));
-      await file.writeAsBytes(bytes, flush: true);
-      if (context.mounted) Navigator.of(context).push(MaterialPageRoute(builder: (_) => _PdfViewerPage(filePath: file.path)));
-    } catch (e) {
-      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('No se pudo abrir el PDF: $e')));
-    }
-  }
-}
-
-// =================== Visor PDF simple ===================
-
-class _PdfViewerPage extends StatelessWidget {
-  final String filePath;
-  const _PdfViewerPage({required this.filePath});
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text(p.basename(filePath)), backgroundColor: const Color(0xFFF2AE2E), foregroundColor: Colors.black),
-      body: PDFView(
-        filePath: filePath, enableSwipe: true, autoSpacing: true, pageFling: true,
-        onError: (error) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error al renderizar PDF: $error'))),
-        onPageError: (page, error) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error en página $page: $error'))),
-        onRender: (pages) {
-          if (pages == 0) {
-            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('El PDF no tiene páginas para mostrar.')));
-          }
-        },
-      ),
-    );
-  }
 }

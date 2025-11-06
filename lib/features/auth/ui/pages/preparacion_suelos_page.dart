@@ -6,6 +6,8 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import 'package:agro_app/features/analisis/ui/widgets/repo_card_compaction.dart';
+import 'package:agro_app/features/analisis/ui/widgets/repo_pdf_viewer.dart';
 import 'reporte_actividad_laboreo_profundo.dart';
 import 'reporte_actividad_laboreo_superficial.dart';
 import 'selector_contexto_page.dart';
@@ -24,15 +26,6 @@ class _SeccionInfo {
 
   final String id;
 }
-
-// Datos unificados por sección (Firestore = fuente de verdad)
-typedef DatosSeccion = ({
-  String nombre,
-  String? storagePath,
-  DateTime? fecha,
-  String barraTexto,
-  _EstadoColor barraColor,
-});
 
 class _DecisionSeccionState {
   const _DecisionSeccionState({
@@ -200,7 +193,7 @@ class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
   String? _unidadId;
 
   final List<_SeccionInfo> _secciones = [];
-  final Map<String, DatosSeccion> _datosPorSeccion = {};
+  final Map<String, RepoItem> _datosPorSeccion = {};
   final Map<String, String?> _decisionPorSeccion = {};
   bool hayRojoGlobal = false;
   bool hayAmarilloGlobal = false;
@@ -244,17 +237,22 @@ class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
     try {
       final unidad = await _resolverUnidad(uid);
       final secciones = await _resolverSecciones(unidad);
-      final datosPorSeccion = <String, DatosSeccion>{};
+      final datosPorSeccion = <String, RepoItem>{};
       var hayRojo = false;
       var hayAmarillo = false;
 
       for (final seccion in secciones) {
-        final analisis = await _ultimoAnalisisPorSeccion(
-          unidad: unidad,
-          seccionId: seccion.id,
-        );
+        final item = await _ultimoDeSeccion(unidad, seccion.id);
+        final repoItem = item ??
+            const RepoItem(
+              titulo: 'Sin archivo reciente',
+              fecha: null,
+              storagePath: null,
+              color: 'desconocido',
+              texto: 'Sin recomendación disponible',
+            );
 
-        final barraColor = analisis.barraColor;
+        final barraColor = _estadoFromAny(repoItem.color);
         if (barraColor == _EstadoColor.rojo) {
           hayRojo = true;
         }
@@ -262,7 +260,7 @@ class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
           hayAmarillo = true;
         }
 
-        datosPorSeccion[seccion.id] = analisis;
+        datosPorSeccion[seccion.id] = repoItem;
       }
 
       final decisionesDetalladas = await _cargarDecisiones(uid, unidad);
@@ -555,13 +553,10 @@ class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
     return null;
   }
 
-  Future<DatosSeccion> _ultimoAnalisisPorSeccion({
-    required String unidad,
-    required String seccionId,
-  }) async {
-    final col = FirebaseFirestore.instance
-        .collection('resultados_analisis_compactacion');
+  String _colorStr(dynamic value) => (value ?? '').toString().toLowerCase().trim();
 
+  Future<RepoItem?> _ultimoDeSeccion(String unidad, String seccionId) async {
+    final col = FirebaseFirestore.instance.collection('resultados_analisis_compactacion');
     final inValues = _seccionCandidatos(seccionId);
     Query<Map<String, dynamic>> q = col
         .where('unidad', isEqualTo: unidad)
@@ -570,118 +565,95 @@ class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
         .limit(1);
 
     try {
-      final snap = await q.get();
-
-      final docs = snap.docs;
-      if (docs.isEmpty) {
+      var snap = await q.get();
+      if (snap.docs.isEmpty) {
         // ignore: avoid_print
         print('[PrepSuelos] Sin docs. unidad=$unidad seccionId=$seccionId candidatos=$inValues');
 
-        final alt1 = await col
+        snap = await col
             .where('unidad', isEqualTo: unidad)
             .where('seccion', isEqualTo: 'Sección $seccionId')
             .orderBy('fecha', descending: true)
             .limit(1)
             .get();
-        if (alt1.docs.isNotEmpty) return _mapDoc(alt1.docs.first);
-
-        final alt2 = await col
-            .where('unidad', isEqualTo: unidad)
-            .where('seccion', isEqualTo: seccionId)
-            .orderBy('fecha', descending: true)
-            .limit(1)
-            .get();
-        if (alt2.docs.isNotEmpty) return _mapDoc(alt2.docs.first);
-
-        return (
-          nombre: 'Sin archivo reciente',
-          storagePath: null,
-          fecha: null,
-          barraTexto: 'Sin recomendación disponible',
-          barraColor: _EstadoColor.desconocido,
-        );
+        if (snap.docs.isEmpty) {
+          snap = await col
+              .where('unidad', isEqualTo: unidad)
+              .where('seccion', isEqualTo: seccionId)
+              .orderBy('fecha', descending: true)
+              .limit(1)
+              .get();
+          if (snap.docs.isEmpty) return null;
+        }
       }
 
-      return _mapDoc(docs.first);
-    } on FirebaseException catch (e) {
-      // ignore: avoid_print
-      print('[PrepSuelos][ERROR] ${e.message} | unidad=$unidad seccionId=$seccionId in=$inValues');
-      return (
-        nombre: 'Sin archivo reciente',
-        storagePath: null,
-        fecha: null,
-        barraTexto: 'Sin recomendación disponible',
-        barraColor: _EstadoColor.desconocido,
+      final m = _docData(snap.docs.first);
+      final rec = _asSD(m['recomendacion']);
+      final colorRaw = rec.isNotEmpty
+          ? (rec['color'] ?? rec['estado'])
+          : (m['recomendacionColor'] ?? m['color'] ?? m['estado']);
+      final textoRaw = rec.isNotEmpty
+          ? (rec['texto'] ?? rec['mensaje'])
+          : (m['recomendacionTexto'] ?? m['texto'] ?? m['mensaje']);
+
+      final arch = _asSD(m['archivo']);
+      String? storagePath = (arch['path'] ??
+              arch['storagePath'] ??
+              arch['storage_path'] ??
+              arch['ruta'])
+          ?.toString()
+          .trim();
+      if (storagePath != null && storagePath.isEmpty) {
+        storagePath = null;
+      }
+
+      final titulo = (arch['nombre'] ??
+              arch['fileName'] ??
+              arch['titulo'] ??
+              m['nombreArchivo'])
+          ?.toString() ??
+          'Documento sin nombre';
+
+      DateTime? fecha;
+      final f1 = m['fecha'];
+      final f2 = arch['updatedAt'] ?? arch['uploadedAt'] ?? arch['actualizado'];
+      if (f1 is Timestamp) {
+        fecha = f1.toDate();
+      } else if (f1 is DateTime) {
+        fecha = f1;
+      } else if (f1 is String) {
+        fecha = DateTime.tryParse(f1);
+      }
+      if (fecha == null) {
+        if (f2 is Timestamp) {
+          fecha = f2.toDate();
+        } else if (f2 is DateTime) {
+          fecha = f2;
+        } else if (f2 is String) {
+          fecha = DateTime.tryParse(f2);
+        }
+      }
+
+      final color = _colorStr(colorRaw).isEmpty ? 'desconocido' : _colorStr(colorRaw);
+      final texto = (textoRaw ?? 'Sin recomendación disponible').toString();
+
+      if (storagePath == null || color == 'desconocido') {
+        // ignore: avoid_print
+        print('[PrepSuelos][_ultimoDeSeccion] faltantes => path=${storagePath ?? "-"} color=$color texto=$texto');
+      }
+
+      return RepoItem(
+        titulo: titulo,
+        fecha: fecha,
+        storagePath: storagePath,
+        color: color,
+        texto: texto,
       );
-    }
-  }
-
-  DatosSeccion _mapDoc(dynamic d) {
-    final m = _docData(d);
-
-    // --- Recomendación (acepta varios nombres) ---
-    final rec = _asSD(m['recomendacion']);
-    final colorRaw = rec.isNotEmpty
-        ? (rec['color'] ?? rec['estado'])
-        : (m['recomendacionColor'] ?? m['color'] ?? m['estado']);
-    final textoRaw = rec.isNotEmpty
-        ? (rec['texto'] ?? rec['mensaje'])
-        : (m['recomendacionTexto'] ?? m['texto'] ?? m['mensaje']);
-
-    final barraColor = _estadoFromAny(colorRaw);
-    final barraTexto = (textoRaw ?? 'Sin recomendación disponible').toString();
-
-    // --- Archivo (acepta varios nombres) ---
-    final arch = _asSD(m['archivo']);
-    String? storagePath = (arch['path'] ??
-            arch['storagePath'] ??
-            arch['storage_path'] ??
-            arch['ruta'])
-        ?.toString()
-        .trim();
-    if (storagePath != null && storagePath.isEmpty) storagePath = null;
-
-    final nombreArchivo = (arch['nombre'] ??
-            arch['fileName'] ??
-            arch['titulo'] ??
-            m['nombreArchivo'])
-        ?.toString() ??
-        'Sin archivo reciente';
-
-    // --- Fecha (preferir m['fecha']) ---
-    DateTime? fecha;
-    final f1 = m['fecha'];
-    final f2 = arch['updatedAt'] ?? arch['uploadedAt'] ?? arch['actualizado'];
-    if (f1 is Timestamp) {
-      fecha = f1.toDate();
-    } else if (f1 is DateTime) {
-      fecha = f1;
-    } else if (f1 is String) {
-      fecha = DateTime.tryParse(f1);
-    }
-    if (fecha == null) {
-      if (f2 is Timestamp) {
-        fecha = f2.toDate();
-      } else if (f2 is DateTime) {
-        fecha = f2;
-      } else if (f2 is String) {
-        fecha = DateTime.tryParse(f2);
-      }
-    }
-
-    // Logs de diagnóstico si faltan piezas
-    if (storagePath == null || barraColor == _EstadoColor.desconocido) {
+    } catch (e) {
       // ignore: avoid_print
-      print('[PrepSuelos][mapDoc] faltantes => path=${storagePath ?? "-"} color=${colorRaw ?? "-"} texto=${barraTexto}');
+      print('[PrepSuelos] Query error unidad=$unidad seccion=$seccionId -> $e');
+      return null;
     }
-
-    return (
-      nombre: nombreArchivo,
-      storagePath: storagePath,
-      fecha: fecha,
-      barraTexto: barraTexto,
-      barraColor: barraColor,
-    );
   }
 
   Future<String?> _urlDeStoragePath(String? path) async {
@@ -836,18 +808,20 @@ class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
  
   Widget _buildCardSeccion(_SeccionInfo seccion) {
     final theme = Theme.of(context);
-    final d = _datosPorSeccion[seccion.id];
-    final barraColor = d?.barraColor ?? _EstadoColor.desconocido;
-    final barraTexto = d?.barraTexto ?? 'Sin recomendación disponible';
-    final nombreArchivo = d?.nombre ?? 'Sin archivo reciente';
-    final fechaTexto = () {
-      final fecha = d?.fecha;
-      if (fecha == null) {
-        return 'Sin fecha disponible';
-      }
-      return DateFormat('dd MMM yyyy, HH:mm', 'es_MX').format(fecha);
-    }();
-    final sinArchivo = d?.storagePath == null;
+    final repoItem = _datosPorSeccion[seccion.id] ??
+        const RepoItem(
+          titulo: 'Sin archivo reciente',
+          fecha: null,
+          storagePath: null,
+          color: 'desconocido',
+          texto: 'Sin recomendación disponible',
+        );
+    final barraColor = _estadoFromAny(repoItem.color);
+    final barraTexto = repoItem.texto.trim().isEmpty
+        ? 'Sin recomendación disponible'
+        : repoItem.texto;
+    final hasArchivo = repoItem.storagePath != null &&
+        repoItem.storagePath!.trim().isNotEmpty;
 
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 8),
@@ -863,64 +837,63 @@ class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
                 Icon(Icons.segment, color: theme.colorScheme.primary),
               ],
             ),
-            const SizedBox(height: 8),
-            Text('Fecha: $fechaTexto', style: theme.textTheme.bodySmall),
-            const SizedBox(height: 6),
-            Text(
-              nombreArchivo,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                fontWeight: FontWeight.w600,
-              ),
+            const SizedBox(height: 12),
+            RepoCardCompaction(
+              item: repoItem,
+              showDelete: false,
+              showTexto: false,
+              onPreview: hasArchivo
+                  ? () async {
+                      final uri = await _urlDeStoragePath(repoItem.storagePath);
+                      if (!mounted) return;
+                      if (uri == null) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('No se pudo abrir el archivo.'),
+                          ),
+                        );
+                        return;
+                      }
+                      await openRepoPdf(context, uri, title: repoItem.titulo);
+                    }
+                  : null,
+              onDownload: hasArchivo
+                  ? () async {
+                      final uri = await _urlDeStoragePath(repoItem.storagePath);
+                      if (!mounted) return;
+                      if (uri == null) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('No se pudo descargar el archivo.'),
+                          ),
+                        );
+                        return;
+                      }
+                      await downloadRepoFile(
+                        context,
+                        uri,
+                        suggestedName: sanitizeRepoFileName(repoItem.titulo),
+                      );
+                    }
+                  : null,
             ),
-            if (sinArchivo) ...[
-              const SizedBox(height: 4),
-              Text(
-                'Sin archivo reciente. Revisa la recomendación para más detalle.',
-                style: theme.textTheme.bodySmall,
-              ),
-            ],
             const SizedBox(height: 12),
             _barraRecomendacion(barraColor, barraTexto),
-            const SizedBox(height: 12),
-            Align(
-              alignment: Alignment.centerRight,
-              child: TextButton.icon(
-                onPressed: sinArchivo
-                    ? null
-                    : () async {
-                        final uri = await _urlDeStoragePath(d!.storagePath);
-                        if (!mounted) return;
-                        if (uri == null) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text(
-                                'No se pudo abrir el archivo',
-                              ),
-                            ),
-                          );
-                          return;
-                        }
-                        await _abrirUrl(uri);
-                      },
-                icon: const Icon(Icons.visibility),
-                label: const Text('Vista previa'),
-              ),
-            ),
-              if (barraColor == _EstadoColor.rojo) ...[
-                const SizedBox(height: 12),
-                _manualPlaceholder(),
-                const SizedBox(height: 12),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: _reporteProfundoButton(
-                    seccion: seccion,
-                    fuente: 'rojo',
-                  ),
+            if (barraColor == _EstadoColor.rojo) ...[
+              const SizedBox(height: 12),
+              _manualPlaceholder(),
+              const SizedBox(height: 12),
+              Align(
+                alignment: Alignment.centerRight,
+                child: _reporteProfundoButton(
+                  seccion: seccion,
+                  fuente: 'rojo',
                 ),
-              ] else if (barraColor == _EstadoColor.amarillo) ...[
-                const SizedBox(height: 12),
-                _decisionWidgetSeccion(seccion),
-              ],
+              ),
+            ] else if (barraColor == _EstadoColor.amarillo) ...[
+              const SizedBox(height: 12),
+              _decisionWidgetSeccion(seccion),
+            ],
           ],
         ),
       ),
