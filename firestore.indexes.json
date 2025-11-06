@@ -4,77 +4,146 @@
       "collectionGroup": "resultados_analisis_compactacion",
       "queryScope": "COLLECTION",
       "fields": [
-        {"fieldPath": "unidad", "order": "ASCENDING"},
-        {"fieldPath": "seccion", "order": "ASCENDING"},
-        {"fieldPath": "fecha", "order": "DESCENDING"}
+        {
+          "fieldPath": "unidad",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "seccion",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "fecha",
+          "order": "DESCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "resultados_analisis_compactacion",
       "queryScope": "COLLECTION",
       "fields": [
-        {"fieldPath": "unidad", "order": "ASCENDING"},
-        {"fieldPath": "fecha", "order": "DESCENDING"}
+        {
+          "fieldPath": "unidad",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "fecha",
+          "order": "DESCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "resultados_analisis_nutrientes",
       "queryScope": "COLLECTION",
       "fields": [
-        {"fieldPath": "unidad", "order": "ASCENDING"},
-        {"fieldPath": "seccion", "order": "ASCENDING"},
-        {"fieldPath": "fecha", "order": "DESCENDING"}
+        {
+          "fieldPath": "unidad",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "seccion",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "fecha",
+          "order": "DESCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "resultados_analisis_nutrientes",
       "queryScope": "COLLECTION",
       "fields": [
-        {"fieldPath": "unidad", "order": "ASCENDING"},
-        {"fieldPath": "fecha", "order": "DESCENDING"}
+        {
+          "fieldPath": "unidad",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "fecha",
+          "order": "DESCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "reportes_compactacion",
       "queryScope": "COLLECTION",
       "fields": [
-        {"fieldPath": "unidad", "order": "ASCENDING"},
-        {"fieldPath": "seccion", "order": "ASCENDING"},
-        {"fieldPath": "fecha", "order": "DESCENDING"}
+        {
+          "fieldPath": "unidad",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "seccion",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "fecha",
+          "order": "DESCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "reportes_compactacion",
       "queryScope": "COLLECTION",
       "fields": [
-        {"fieldPath": "unidad", "order": "ASCENDING"},
-        {"fieldPath": "fecha", "order": "DESCENDING"}
+        {
+          "fieldPath": "unidad",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "fecha",
+          "order": "DESCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "reportes_nutrientes",
       "queryScope": "COLLECTION",
       "fields": [
-        {"fieldPath": "unidad", "order": "ASCENDING"},
-        {"fieldPath": "seccion", "order": "ASCENDING"},
-        {"fieldPath": "fecha", "order": "DESCENDING"}
+        {
+          "fieldPath": "unidad",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "seccion",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "fecha",
+          "order": "DESCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "reportes_nutrientes",
       "queryScope": "COLLECTION",
       "fields": [
-        {"fieldPath": "unidad", "order": "ASCENDING"},
-        {"fieldPath": "fecha", "order": "DESCENDING"}
+        {
+          "fieldPath": "unidad",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "fecha",
+          "order": "DESCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "actividades_laboreo_profundo",
       "queryScope": "COLLECTION",
       "fields": [
-        {"fieldPath": "uid", "order": "ASCENDING"},
-        {"fieldPath": "unidad", "order": "ASCENDING"},
-        {"fieldPath": "updatedAt", "order": "DESCENDING"}
+        {
+          "fieldPath": "uid",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "unidad",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "updatedAt",
+          "order": "DESCENDING"
+        }
       ]
     }
   ],
