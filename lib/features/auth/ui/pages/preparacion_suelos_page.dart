@@ -180,6 +180,15 @@ class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
   List<_SeccionInfo> _secciones = const [];
   final Map<String, _ArchivoStorageInfo?> _archivosPorSeccion = {};
   final Map<String, _RecomendacionInfo?> _recomendacionesPorSeccion = {};
+  final Map<
+      String,
+      ({
+        String nombre,
+        String? storagePath,
+        DateTime? fecha,
+        String barraTexto,
+        _EstadoColor barraColor,
+      })> _datosPorSeccion = {};
   final Map<String, _DecisionSeccionState> _decisionPorSeccion = {};
   bool _hayRojo = false;
   bool _hayAmarillo = false;
@@ -226,11 +235,76 @@ class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
       final recomendaciones = <String, _RecomendacionInfo?>{};
       bool hayRojo = false;
       bool hayAmarillo = false;
+      final datosPorSeccion = <
+          String,
+          ({
+            String nombre,
+            String? storagePath,
+            DateTime? fecha,
+            String barraTexto,
+            _EstadoColor barraColor,
+          })>{};
       for (final seccion in secciones) {
         final archivo = await _ultimoArchivoStorage(unidad, seccion);
         archivos[seccion.id] = archivo;
         final recomendacion = await _recomendacion(unidad, seccion);
         recomendaciones[seccion.id] = recomendacion;
+        final barraColor = recomendacion?.color ?? _EstadoColor.desconocido;
+        final barraTexto =
+            recomendacion?.texto ?? 'Sin recomendación disponible';
+        String nombreArchivo = archivo?.nombre ?? 'Sin archivo reciente';
+        DateTime? fechaArchivo = archivo?.fecha ?? recomendacion?.fecha;
+        String? storagePath = archivo?.metadata.fullPath;
+        storagePath = storagePath?.trim();
+
+        Map<String, dynamic>? archivoDesdeDoc;
+        final dataDoc = recomendacion?.doc?.data();
+        if (dataDoc != null) {
+          final rawArchivo = dataDoc['archivo'];
+          if (rawArchivo is Map<String, dynamic>) {
+            archivoDesdeDoc = rawArchivo;
+          } else if (rawArchivo is Map) {
+            archivoDesdeDoc = rawArchivo.map(
+              (key, value) => MapEntry(key.toString(), value),
+            );
+          }
+        }
+
+        if (archivoDesdeDoc != null) {
+          final pathDoc = _stringFromDynamic(archivoDesdeDoc['path']) ??
+              _stringFromDynamic(archivoDesdeDoc['storagePath']) ??
+              _stringFromDynamic(archivoDesdeDoc['storage_path']) ??
+              _stringFromDynamic(archivoDesdeDoc['ruta']);
+          final nombreDoc = _stringFromDynamic(archivoDesdeDoc['nombre']) ??
+              _stringFromDynamic(archivoDesdeDoc['fileName']) ??
+              _stringFromDynamic(archivoDesdeDoc['titulo']);
+          final fechaDoc = _fechaDesdeDynamic(archivoDesdeDoc['fecha']) ??
+              _fechaDesdeDynamic(archivoDesdeDoc['uploadedAt']) ??
+              _fechaDesdeDynamic(archivoDesdeDoc['actualizado']);
+
+          if ((storagePath ?? '').isEmpty) {
+            if (pathDoc != null && pathDoc.isNotEmpty) {
+              final trimmedPath = pathDoc.trim();
+              if (trimmedPath.isNotEmpty) {
+                storagePath = trimmedPath;
+                if (nombreDoc != null && nombreDoc.isNotEmpty) {
+                  nombreArchivo = nombreDoc;
+                }
+                if (fechaDoc != null) {
+                  fechaArchivo = fechaDoc;
+                }
+              }
+            }
+          }
+        }
+
+        datosPorSeccion[seccion.id] = (
+          nombre: nombreArchivo,
+          storagePath: storagePath,
+          fecha: fechaArchivo,
+          barraTexto: barraTexto,
+          barraColor: barraColor,
+        );
         if (recomendacion != null) {
           if (recomendacion.color == _EstadoColor.rojo) {
             hayRojo = true;
@@ -253,6 +327,9 @@ class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
         _recomendacionesPorSeccion
           ..clear()
           ..addAll(recomendaciones);
+        _datosPorSeccion
+          ..clear()
+          ..addAll(datosPorSeccion);
         _decisionPorSeccion
           ..clear()
           ..addAll(decisiones);
@@ -809,16 +886,16 @@ class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
  
   Widget _buildCardSeccion(_SeccionInfo seccion) {
     final theme = Theme.of(context);
-    final archivo = _archivosPorSeccion[seccion.id];
-    final recomendacion = _recomendacionesPorSeccion[seccion.id];
-    final estado = recomendacion?.color ?? _EstadoColor.desconocido;
-    final texto = recomendacion?.texto ?? 'Sin recomendación disponible';
-    final fechaBase = archivo?.fecha ?? recomendacion?.fecha;
+    final datos = _datosPorSeccion[seccion.id];
+    final estado = _colorBarra(seccion.id);
+    final texto = datos?.barraTexto ?? 'Sin recomendación disponible';
+    final fechaBase = datos?.fecha;
     final fechaTexto = fechaBase == null
         ? 'Sin fecha disponible'
         : DateFormat('dd/MM/yyyy', 'es_MX').format(fechaBase);
-    final nombreArchivo = archivo?.nombre ?? 'Sin archivo reciente';
-    final url = archivo?.url;
+    final nombreArchivo = datos?.nombre ?? 'Sin archivo reciente';
+    final storagePath = datos?.storagePath;
+    final sinArchivoReciente = storagePath?.isEmpty ?? true;
 
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 8),
@@ -843,10 +920,10 @@ class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
                 fontWeight: FontWeight.w600,
               ),
             ),
-            if (archivo == null) ...[
+            if (sinArchivoReciente) ...[
               const SizedBox(height: 4),
               Text(
-                'No se encontraron archivos en Storage para el año actual.',
+                'Sin archivo reciente. Revisa la recomendación para más detalles.',
                 style: theme.textTheme.bodySmall,
               ),
             ],
@@ -856,7 +933,23 @@ class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
             Align(
               alignment: Alignment.centerRight,
               child: TextButton.icon(
-                onPressed: url == null ? null : () => _abrirUrl(url),
+                onPressed: sinArchivoReciente
+                    ? null
+                    : () async {
+                        final url = await _urlDeStoragePath(storagePath!);
+                        if (!mounted) return;
+                        if (url == null) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text(
+                                'No se pudo obtener el archivo para mostrar.',
+                              ),
+                            ),
+                          );
+                          return;
+                        }
+                        await _abrirUrl(url);
+                      },
                 icon: const Icon(Icons.visibility_outlined),
                 label: const Text('Vista previa'),
               ),
@@ -1536,6 +1629,11 @@ class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
     );
   }
 
+  _EstadoColor _colorBarra(String seccionId) {
+    final datos = _datosPorSeccion[seccionId];
+    return datos?.barraColor ?? _EstadoColor.desconocido;
+  }
+
   Color _colorParaEstado(_EstadoColor estado) {
     switch (estado) {
       case _EstadoColor.verde:
@@ -1547,6 +1645,22 @@ class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
       case _EstadoColor.desconocido:
       default:
         return Colors.blueGrey.shade400;
+    }
+  }
+
+  Future<String?> _urlDeStoragePath(String path) async {
+    try {
+      fb_storage.Reference ref;
+      if (path.startsWith('gs://') || path.startsWith('http')) {
+        ref = fb_storage.FirebaseStorage.instance.refFromURL(path);
+      } else {
+        ref = fb_storage.FirebaseStorage.instance.ref(path);
+      }
+      return await ref.getDownloadURL();
+    } on fb_storage.FirebaseException {
+      return null;
+    } catch (_) {
+      return null;
     }
   }
 
@@ -1578,6 +1692,32 @@ class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
       default:
         return _EstadoColor.desconocido;
     }
+  }
+
+  DateTime? _fechaDesdeDynamic(dynamic value) {
+    if (value is Timestamp) {
+      return value.toDate();
+    }
+    if (value is DateTime) {
+      return value;
+    }
+    if (value is String) {
+      return DateTime.tryParse(value);
+    }
+    if (value is int) {
+      if (value > 1000000000000) {
+        return DateTime.fromMillisecondsSinceEpoch(value);
+      }
+      return DateTime.fromMillisecondsSinceEpoch(value * 1000);
+    }
+    if (value is num) {
+      final intValue = value.toInt();
+      if (intValue > 1000000000000) {
+        return DateTime.fromMillisecondsSinceEpoch(intValue);
+      }
+      return DateTime.fromMillisecondsSinceEpoch(intValue * 1000);
+    }
+    return null;
   }
 
   String _nombreSeleccion(String raw) {
