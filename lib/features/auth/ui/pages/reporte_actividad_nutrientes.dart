@@ -726,7 +726,7 @@ class _ReporteActividadNutrientesPageState extends State<ReporteActividadNutrien
           pw.Container(
             padding: const pw.EdgeInsets.all(12),
             decoration: pw.BoxDecoration(
-              color: PdfColors.white.withOpacity(0.9),
+              color: PdfColor.fromInt(0xE6FFFFFF),
               borderRadius: pw.BorderRadius.circular(8),
             ),
             child: pw.Column(
