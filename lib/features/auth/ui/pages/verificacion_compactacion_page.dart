@@ -1,4 +1,5 @@
 // lib/features/auth/ui/pages/verificacion_compactacion_page.dart
+import 'dart:async';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -17,7 +18,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 import 'dart:io';
 import 'package:flutter_pdfview/flutter_pdfview.dart';
-import 'package:agro_app/widgets/upload_overlay.dart';
+import 'package:agro_app/widgets/transfer_progress_overlay.dart';
 
 class VerificacionCompactacionPage extends StatefulWidget {
   const VerificacionCompactacionPage({super.key});
@@ -58,6 +59,7 @@ class _VerificacionCompactacionPageState extends State<VerificacionCompactacionP
 
   // --- Repositorio PDF UI ---
   String? _selectedPdfId; // doc id seleccionado en el dropdown
+  final TransferProgressController _progressController = TransferProgressController();
 
   @override
   void initState() {
@@ -75,6 +77,7 @@ class _VerificacionCompactacionPageState extends State<VerificacionCompactacionP
       c.removeListener(_recalcMediaEnEdicion);
       c.dispose();
     }
+    _progressController.dispose();
     super.dispose();
   }
 
@@ -856,6 +859,30 @@ class _VerificacionCompactacionPageState extends State<VerificacionCompactacionP
     );
   }
 
+  Future<TaskSnapshot> _awaitUpload(UploadTask uploadTask, String label) async {
+    StreamSubscription<TaskSnapshot>? sub;
+    _progressController.updateProgress(0, label: label);
+    _progressController.show(context, label: label);
+    try {
+      sub = uploadTask.snapshotEvents.listen((snapshot) {
+        final total = snapshot.totalBytes;
+        final progress = total == 0
+            ? 0.0
+            : (snapshot.bytesTransferred / total).clamp(0.0, 1.0);
+        _progressController.updateProgress(
+          progress.isNaN || progress.isInfinite ? 0.0 : progress,
+          label: label,
+        );
+      });
+      final snap = await uploadTask;
+      _progressController.updateProgress(1.0, label: label);
+      return snap;
+    } finally {
+      await sub?.cancel();
+      _progressController.hide();
+    }
+  }
+
   // ================== PDF Helpers ==================
   Future<String?> _generateAndUploadPdf({
     required String uid,
@@ -1015,16 +1042,44 @@ class _VerificacionCompactacionPageState extends State<VerificacionCompactacionP
         bytes,
         SettableMetadata(contentType: 'application/pdf'),
       );
-      showUploadOverlayForTask(
-        context,
-        uploadTask,
-        label: 'Subiendo reporte…',
-      );
-      await uploadTask;
+      await _awaitUpload(uploadTask, 'Subiendo reporte…');
       final url = await ref.getDownloadURL();
       return url;
     } catch (e) {
       return null;
+    }
+  }
+
+  Future<Uint8List> _downloadBytesWithProgress(String url, String label) async {
+    final client = http.Client();
+    _progressController.updateProgress(0, label: label);
+    _progressController.show(context, label: label);
+    try {
+      final response = await client.send(http.Request('GET', Uri.parse(url)));
+      if (response.statusCode != 200) {
+        throw 'HTTP ${response.statusCode}';
+      }
+
+      final total = response.contentLength ?? 0;
+      final buffer = BytesBuilder(copy: false);
+      var received = 0;
+
+      await for (final chunk in response.stream) {
+        buffer.add(chunk);
+        received += chunk.length;
+        if (total > 0) {
+          _progressController.updateProgress((received / total).clamp(0.0, 1.0), label: label);
+        } else {
+          final approx = (1 - (1 / (1 + received / 500000))).clamp(0.0, 0.95);
+          _progressController.updateProgress(approx, label: label);
+        }
+      }
+
+      _progressController.updateProgress(1.0, label: label);
+      return buffer.takeBytes();
+    } finally {
+      _progressController.hide();
+      client.close();
     }
   }
 
@@ -1033,8 +1088,8 @@ class _VerificacionCompactacionPageState extends State<VerificacionCompactacionP
     try {
       final tmp = await getTemporaryDirectory();
       final file = File(p.join(tmp.path, 'verif_${DateTime.now().millisecondsSinceEpoch}.pdf'));
-      final resp = await http.get(Uri.parse(url));
-      await file.writeAsBytes(resp.bodyBytes, flush: true);
+      final bytes = await _downloadBytesWithProgress(url, 'Descargando reporte…');
+      await file.writeAsBytes(bytes, flush: true);
       if (!mounted) return;
       Navigator.of(context).push(
         MaterialPageRoute(builder: (_) => _PdfViewerPage(filePath: file.path)),

@@ -1,4 +1,5 @@
 // lib/features/auth/ui/pages/personal_info_page.dart
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -6,7 +7,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
 
-import 'package:agro_app/widgets/upload_overlay.dart';
+import 'package:agro_app/widgets/transfer_progress_overlay.dart';
 
 class PersonalInfoPage extends StatefulWidget {
   const PersonalInfoPage({super.key});
@@ -20,6 +21,7 @@ class _PersonalInfoPageState extends State<PersonalInfoPage> {
   bool _isLoading = true;
   bool _isSaving = false;
   final _formKey = GlobalKey<FormState>();
+  final TransferProgressController _progressController = TransferProgressController();
 
   // Controladores para los campos del formulario
   final _nombreCtrl = TextEditingController();
@@ -41,6 +43,7 @@ class _PersonalInfoPageState extends State<PersonalInfoPage> {
     _nombreCtrl.dispose();
     _dirCtrl.dispose();
     _telCtrl.dispose();
+    _progressController.dispose();
     super.dispose();
   }
 
@@ -100,8 +103,26 @@ class _PersonalInfoPageState extends State<PersonalInfoPage> {
       if (_imageFile != null) {
         final ref = FirebaseStorage.instance.ref().child('profile_pictures').child('${user.uid}.jpg');
         final uploadTask = ref.putFile(_imageFile!);
-        showUploadOverlayForTask(context, uploadTask, label: 'Subiendo foto de perfil…');
-        await uploadTask;
+        StreamSubscription<TaskSnapshot>? sub;
+        _progressController.updateProgress(0, label: 'Subiendo foto de perfil…');
+        _progressController.show(context, label: 'Subiendo foto de perfil…');
+        try {
+          sub = uploadTask.snapshotEvents.listen((snapshot) {
+            final total = snapshot.totalBytes;
+            final progress = total == 0
+                ? 0.0
+                : (snapshot.bytesTransferred / total).clamp(0.0, 1.0);
+            _progressController.updateProgress(
+              progress.isNaN || progress.isInfinite ? 0.0 : progress,
+              label: 'Subiendo foto de perfil…',
+            );
+          });
+          await uploadTask;
+          _progressController.updateProgress(1.0, label: 'Subiendo foto de perfil…');
+        } finally {
+          await sub?.cancel();
+          _progressController.hide();
+        }
         newPhotoUrl = await ref.getDownloadURL();
       }
 
