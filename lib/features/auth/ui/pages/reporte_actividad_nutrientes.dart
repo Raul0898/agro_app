@@ -687,7 +687,6 @@ class _ReporteActividadNutrientesPageState extends State<ReporteActividadNutrien
                 border: pw.Border.all(color: PdfColors.grey300, width: 0.6),
                 borderRadius: pw.BorderRadius.circular(6),
               ),
-              clipBehavior: pw.Clip.antiAlias,
               child: pw.FittedBox(
                 fit: pw.BoxFit.cover,
                 child: pw.Image(pw.MemoryImage(bytes)),
