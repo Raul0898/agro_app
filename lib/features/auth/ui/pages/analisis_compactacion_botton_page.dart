@@ -216,11 +216,9 @@ class _AnalisisCompactacionBottonPageState extends State<AnalisisCompactacionPag
 
     final caso = _clasificarPorPromedios(promedios);
     final recomendacion = _mensajeRecomendacion(caso);
-
-    final headerBytes = await _tryLoadAssetBytes([
-      'IMG/recomendaciones.png',
-      'IMG/recomendaciones.jpg',
-      'IMG/recomendaciones.jpeg',
+    final portadaBytes = await _tryLoadAssetBytes([
+      'IMG/portada_recomendaciones_2.jpg',
+      'IMG/portada_recomendaciones_2.png',
     ]);
 
     final subsueloBytes = await _tryLoadAssetBytes([
@@ -228,6 +226,10 @@ class _AnalisisCompactacionBottonPageState extends State<AnalisisCompactacionPag
       'IMG/subsuelo.jpg',
       'IMG/subsuelo.jpeg',
     ]);
+
+    final portadaImage = portadaBytes == null ? null : pw.MemoryImage(portadaBytes);
+    final subsueloImage = subsueloBytes == null ? null : pw.MemoryImage(subsueloBytes);
+    final esRojo = caso == _Caso.rojo;
 
     pw.Widget headerText() => pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
@@ -320,41 +322,156 @@ class _AnalisisCompactacionBottonPageState extends State<AnalisisCompactacionPag
       ),
     );
 
+    pw.Widget leyendaYNotas() => pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
+      children: [
+        pw.Row(
+          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+          children: [
+            pw.Text('≤100 PSI: Verde', style: pw.TextStyle(fontSize: 9)),
+            pw.Text('101–200 PSI: Amarillo', style: pw.TextStyle(fontSize: 9)),
+            pw.Text('≥201 PSI: Rojo', style: pw.TextStyle(fontSize: 9)),
+          ],
+        ),
+        pw.SizedBox(height: 8),
+        pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            pw.Text(
+              'LC : Labranza de Conservacion',
+              style: pw.TextStyle(
+                fontSize: 11,
+                fontWeight: pw.FontWeight.bold,
+              ),
+            ),
+            pw.SizedBox(height: 4),
+            pw.Text(
+              'La labranza de conservacion es una tecnica conservacionista que tiene como objetivo acondicionar el suelo para el establecimiento del cultivo realizando un minimo o nulo movimiento del suelo, para posteriormente realizar la siembra directa.',
+              style: pw.TextStyle(
+                fontSize: 10,
+              ),
+            ),
+          ],
+        ),
+        if (esRojo) ...[
+          pw.SizedBox(height: 12),
+          pw.Container(
+            width: double.infinity,
+            padding: const pw.EdgeInsets.symmetric(vertical: 6),
+            color: PdfColor.fromInt(0xFFF0B429),
+            child: pw.Center(
+              child: pw.Text(
+                'Recomendaciones',
+                style: pw.TextStyle(
+                  fontSize: 12,
+                  fontWeight: pw.FontWeight.bold,
+                ),
+              ),
+            ),
+          ),
+          pw.SizedBox(height: 8),
+          pw.Row(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Expanded(
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text(
+                      'Descompactacion del Suelo',
+                      style: pw.TextStyle(
+                        fontSize: 11,
+                        fontWeight: pw.FontWeight.bold,
+                        fontStyle: pw.FontStyle.italic,
+                      ),
+                    ),
+                    pw.SizedBox(height: 4),
+                    pw.Text(
+                      'Si se requiere SUBSUELO y si la compactacion de 200 psi o mas se presenta a mas de 15 cm de profundidad o en todo el perfil de suelo, sera necesario dar un paso de subsuelo o subsuelo/multiarado. Esta labor debera realizarse de preferencia de forma cruzada en un angulo de 35° de la direccion de los surcos.',
+                      style: pw.TextStyle(fontSize: 10),
+                    ),
+                  ],
+                ),
+              ),
+              pw.SizedBox(width: 8),
+              pw.Expanded(
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text(
+                      'Trafico Controlado',
+                      style: pw.TextStyle(
+                        fontSize: 11,
+                        fontWeight: pw.FontWeight.bold,
+                        fontStyle: pw.FontStyle.italic,
+                      ),
+                    ),
+                    pw.SizedBox(height: 4),
+                    pw.Text(
+                      'Para evitar la compactacion del suelo se debera establecer como politica de trafico que todo vehiculo que ingrese a la parcela, incluida la trilladora, lo haga sobre surcos definidos, cuidando que sus llantas solo rueden por el fondo del surco. En cuanto a los camiones de carga, estos deben quedarse en las calles laterales y la combinada debe trasladarse hacia el camion para hacer la descarga.',
+                      style: pw.TextStyle(fontSize: 10),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          pw.SizedBox(height: 12),
+          if (subsueloImage != null)
+            pw.Center(
+              child: pw.Image(
+                subsueloImage,
+                width: 250,
+                fit: pw.BoxFit.contain,
+              ),
+            ),
+        ],
+      ],
+    );
+
+    pw.Widget contenidoAnalisis() => pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
+      children: [
+        headerText(),
+        pw.SizedBox(height: 10),
+        pw.Table(
+          border: pw.TableBorder.all(color: PdfColor.fromInt(0xFFD9D9D9)),
+          defaultVerticalAlignment: pw.TableCellVerticalAlignment.middle,
+          children: rows,
+        ),
+        pw.SizedBox(height: 12),
+        promsBox(),
+        pw.SizedBox(height: 12),
+        recoBox(),
+        pw.SizedBox(height: 8),
+        leyendaYNotas(),
+        pw.SizedBox(height: 10),
+        pw.Align(
+          alignment: pw.Alignment.centerRight,
+          child: pw.Text('Generado por IDRA', style: pw.TextStyle(fontSize: 9)),
+        ),
+      ],
+    );
+
     doc.addPage(
       pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
         margin: const pw.EdgeInsets.fromLTRB(24, 28, 24, 28),
         build: (ctx) => [
-          if (headerBytes != null)
-            pw.Container(
-              margin: const pw.EdgeInsets.only(bottom: 8),
-              child: pw.Image(
-                pw.MemoryImage(headerBytes),
-                width: PdfPageFormat.a4.availableWidth,
-                height: PdfPageFormat.a4.availableHeight * 0.22,
-                fit: pw.BoxFit.contain,
-              ),
-            ),
-          headerText(),
-          pw.SizedBox(height: 10),
-          pw.Table(border: pw.TableBorder.all(color: PdfColor.fromInt(0xFFD9D9D9)), defaultVerticalAlignment: pw.TableCellVerticalAlignment.middle, children: rows),
-          pw.SizedBox(height: 12),
-          promsBox(),
-          pw.SizedBox(height: 12),
-          recoBox(),
-          pw.SizedBox(height: 8),
-          pw.Row(
-            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+          pw.Stack(
             children: [
-              pw.Text('≤100 PSI: Verde', style: pw.TextStyle(fontSize: 9)),
-              pw.Text('101–200 PSI: Amarillo', style: pw.TextStyle(fontSize: 9)),
-              pw.Text('≥201 PSI: Rojo', style: pw.TextStyle(fontSize: 9)),
+              if (portadaImage != null)
+                pw.Positioned.fill(
+                  child: pw.Image(
+                    portadaImage,
+                    fit: pw.BoxFit.cover,
+                  ),
+                ),
+              pw.Padding(
+                padding: const pw.EdgeInsets.all(12),
+                child: contenidoAnalisis(),
+              ),
             ],
-          ),
-          pw.SizedBox(height: 10),
-          pw.Align(
-            alignment: pw.Alignment.centerRight,
-            child: pw.Text('Generado por IDRA', style: pw.TextStyle(fontSize: 9)),
           ),
         ],
       ),
