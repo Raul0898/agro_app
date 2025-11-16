@@ -766,7 +766,7 @@ class _AnalisisCompactacionBottonPageState extends State<AnalisisCompactacionPag
 
       return true;
     } catch (e) {
-      _showSnack('No se pudo sobrescribir el archivo: $e', error: true);
+      _showSnack('No se pudo generar el PDF: $e', error: true);
       return false;
     }
   }

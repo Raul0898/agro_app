@@ -585,7 +585,7 @@ class _ReporteActividadNutrientesPageState extends State<ReporteActividadNutrien
     }
   }
 
-  // ====================== PDF — 1 hoja, 2 columnas, inicio más bajo, iconos naranjas ======================
+  // ====================== PDF — autopaginado ======================
   Future<Uint8List> _buildPdfBytes() async {
     final pdf = pw.Document();
     final fechaFmt = DateFormat('dd/MM/yyyy HH:mm', 'es_MX').format(_fechaHora);
@@ -593,86 +593,121 @@ class _ReporteActividadNutrientesPageState extends State<ReporteActividadNutrien
     final bgData = await rootBundle.load('IMG/portada_reportes_1.jpg');
     final bg = pw.MemoryImage(bgData.buffer.asUint8List());
 
-    // ------ Encabezado con "icono" + título (naranja corporativo) ------
+    final pageTheme = pw.PageTheme(
+      pageFormat: PdfPageFormat.a4,
+      margin: const pw.EdgeInsets.all(24),
+      buildBackground: (_) => pw.FullPage(
+        ignoreMargins: true,
+        child: pw.Image(bg, fit: pw.BoxFit.cover),
+      ),
+    );
+
     pw.Widget header(String emoji, String title) => pw.Row(
-      crossAxisAlignment: pw.CrossAxisAlignment.center,
-      children: [
-        pw.Container(
-          decoration: pw.BoxDecoration(
-            color: PdfColor.fromInt(0xFFF2AE2E),
-            borderRadius: pw.BorderRadius.circular(8),
-          ),
-          padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-          child: pw.Text(emoji,
-              style: const pw.TextStyle(
-                fontSize: 11,
-                color: PdfColors.black,
-              )),
-        ),
-        pw.SizedBox(width: 6),
-        pw.Text(
-          title,
-          style: pw.TextStyle(
-            fontSize: 12.5,
-            fontWeight: pw.FontWeight.bold,
-            color: PdfColor.fromInt(0xFFF2AE2E),
-          ),
-        ),
-      ],
-    );
+          crossAxisAlignment: pw.CrossAxisAlignment.center,
+          children: [
+            pw.Container(
+              decoration: pw.BoxDecoration(
+                color: PdfColor.fromInt(0xFFF2AE2E),
+                borderRadius: pw.BorderRadius.circular(8),
+              ),
+              padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              child: pw.Text(
+                emoji,
+                style: const pw.TextStyle(fontSize: 11, color: PdfColors.black),
+              ),
+            ),
+            pw.SizedBox(width: 6),
+            pw.Text(
+              title,
+              style: pw.TextStyle(
+                fontSize: 12.5,
+                fontWeight: pw.FontWeight.bold,
+                color: PdfColor.fromInt(0xFFF2AE2E),
+              ),
+            ),
+          ],
+        );
 
-    // Párrafos (sin guiones)
-    pw.Widget lines(List<String> items) => pw.Column(
-      crossAxisAlignment: pw.CrossAxisAlignment.start,
-      children: [
-        for (final t in items)
-          pw.Padding(
-            padding: const pw.EdgeInsets.only(top: 2),
-            child: pw.Text(t,
-                style: const pw.TextStyle(fontSize: 11, color: PdfColors.black)),
-          ),
-      ],
-    );
-
-    // Rejilla imágenes (3x2) que no se salen del área
-    pw.Widget imagesGrid({
-      required List<Uint8List> images,
-      required double height,
-    }) {
-      if (images.isEmpty) return pw.SizedBox(height: height);
-      final imgs = images.take(6).toList();
-      return pw.Container(
-        height: height,
-        child: pw.ClipRect(
-          child: pw.GridView(
-            crossAxisCount: 3,
-            childAspectRatio: 1,
-            crossAxisSpacing: 6,
-            mainAxisSpacing: 6,
-            children: [
-              for (final b in imgs)
-                pw.Container(
-                  decoration: pw.BoxDecoration(
-                    border: pw.Border.all(color: PdfColors.grey300, width: 0.6),
-                    borderRadius: pw.BorderRadius.circular(4),
-                  ),
-                  child: pw.FittedBox(
-                    fit: pw.BoxFit.contain,
-                    child: pw.Image(pw.MemoryImage(b)),
-                  ),
+    pw.Widget bulletLines(List<String> items) => pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            for (final t in items)
+              pw.Padding(
+                padding: const pw.EdgeInsets.only(bottom: 4),
+                child: pw.Text(
+                  t,
+                  style: const pw.TextStyle(fontSize: 11, color: PdfColors.black),
                 ),
-            ],
+              ),
+          ],
+        );
+
+    pw.Widget keyValueTable(List<List<String>> rows) => pw.TableHelper.fromTextArray(
+          headers: const ['Campo', 'Detalle'],
+          data: rows,
+          headerCount: 1,
+          border: pw.TableBorder.all(color: PdfColors.grey300, width: 0.6),
+          headerStyle: pw.TextStyle(
+            fontWeight: pw.FontWeight.bold,
+            color: PdfColor.fromInt(0xFF3E3E3E),
           ),
-        ),
+          headerDecoration: const pw.BoxDecoration(color: PdfColors.grey200),
+          cellAlignments: {
+            0: pw.Alignment.centerLeft,
+            1: pw.Alignment.centerLeft,
+          },
+          cellStyle: const pw.TextStyle(fontSize: 11),
+        );
+
+    pw.Widget section({required String emoji, required String title, required pw.Widget child}) =>
+        pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+          children: [
+            header(emoji, title),
+            pw.SizedBox(height: 6),
+            child,
+            pw.SizedBox(height: 12),
+          ],
+        );
+
+    pw.Widget imagesWrap(String emptyText, List<Uint8List> images) {
+      if (images.isEmpty) {
+        return pw.Text(emptyText, style: const pw.TextStyle(fontSize: 11));
+      }
+
+      return pw.Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          for (final bytes in images)
+            pw.Container(
+              width: 150,
+              height: 110,
+              decoration: pw.BoxDecoration(
+                border: pw.Border.all(color: PdfColors.grey300, width: 0.6),
+                borderRadius: pw.BorderRadius.circular(6),
+              ),
+              clipBehavior: pw.Clip.antiAlias,
+              child: pw.FittedBox(
+                fit: pw.BoxFit.cover,
+                child: pw.Image(pw.MemoryImage(bytes)),
+              ),
+            ),
+        ],
       );
     }
 
-    // Datos
-    final datosGenerales = <String>[
-      'Unidad: ${_ubicacionCtrl.text.trim()}',
-      'Responsable: ${_responsableCtrl.text.trim()}',
-      'Fecha y Hora: $fechaFmt',
+    final datosGenerales = [
+      ['Unidad', _ubicacionCtrl.text.trim()],
+      ['Responsable', _responsableCtrl.text.trim()],
+      ['Fecha y Hora', fechaFmt],
     ];
+
+    final recursos = [
+      ['Combustible / Lts', _combustibleCtrl.text.trim().isEmpty ? '-' : _combustibleCtrl.text.trim()],
+      ['Herramientas Utilizadas', _herramientasCtrl.text.trim().isEmpty ? '-' : _herramientasCtrl.text.trim()],
+    ];
+
     final nombreReporte = _nombreReporte();
     final comentarios = _comentariosCtrl.text.trim().isEmpty
         ? ['(sin comentarios)']
@@ -680,109 +715,69 @@ class _ReporteActividadNutrientesPageState extends State<ReporteActividadNutrien
     final incidenciasTxt = _incidenciasTextoCtrl.text.trim().isEmpty
         ? ['(sin incidencias)']
         : _incidenciasTextoCtrl.text.trim().split('\n');
-    final recursos = <String>[
-      'Combustible / Lts: ${_combustibleCtrl.text.trim().isEmpty ? '-' : _combustibleCtrl.text.trim()}',
-      'Herramientas Utilizadas: ${_herramientasCtrl.text.trim().isEmpty ? '-' : _herramientasCtrl.text.trim()}',
-    ];
     final recomendaciones = _recomendacionesCtrl.text.trim().isEmpty
         ? ['(sin recomendaciones)']
         : _recomendacionesCtrl.text.trim().split('\n');
 
-    // -------- Layout A4: 2 columnas, todo en 1 hoja --------
-    const pageW = 595.0; // A4 points
-    const side = 32.0;
-    const top = 340.0; // más abajo para despegar del mapa
-    const gapX = 18.0;
-    const gapY = 10.0;
-    final colW = (pageW - side * 2 - gapX) / 2;
-
-    // Alturas por bloque (ajustadas para caber en 1 hoja)
-    const hDatos = 70.0;
-    const hNombre = 55.0;
-    const hComentarios = 100.0;
-    const hIncidTxt = 45.0;
-    const hIncidImgs = 135.0;
-
-    const hRecursos = 110.0;
-    const hRecomend = 120.0;
-    const hImgsRep = 180.0;
-
     pdf.addPage(
-      pw.Page(
-        pageFormat: PdfPageFormat.a4,
-        margin: pw.EdgeInsets.zero,
-        build: (_) {
-          return pw.Stack(
-            children: [
-              pw.Positioned.fill(child: pw.Image(bg, fit: pw.BoxFit.cover)),
-
-              // -------- Columna Izquierda --------
-              pw.Positioned(
-                left: side,
-                top: top,
-                child: pw.Container(
-                  width: colW,
+      pw.MultiPage(
+        pageTheme: pageTheme,
+        build: (_) => [
+          pw.Container(
+            padding: const pw.EdgeInsets.all(12),
+            decoration: pw.BoxDecoration(
+              color: PdfColors.white.withOpacity(0.9),
+              borderRadius: pw.BorderRadius.circular(8),
+            ),
+            child: pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+              children: [
+                section(
+                  emoji: '📍',
+                  title: '01 DATOS GENERALES',
+                  child: keyValueTable(datosGenerales),
+                ),
+                section(
+                  emoji: '📝',
+                  title: '02 NOMBRE DEL REPORTE',
+                  child: pw.Text(nombreReporte, style: const pw.TextStyle(fontSize: 11)),
+                ),
+                section(
+                  emoji: '💬',
+                  title: '03 COMENTARIOS',
+                  child: bulletLines(comentarios),
+                ),
+                section(
+                  emoji: '⚠️',
+                  title: '04 INCIDENCIAS',
                   child: pw.Column(
                     crossAxisAlignment: pw.CrossAxisAlignment.stretch,
                     children: [
-                      header('📍', '01 DATOS GENERALES'),
-                      pw.SizedBox(height: 6),
-                      pw.Container(height: hDatos, child: lines(datosGenerales)),
-                      pw.SizedBox(height: gapY),
-
-                      header('📝', '02 NOMBRE DEL REPORTE'),
-                      pw.SizedBox(height: 6),
-                      pw.Container(
-                        height: hNombre,
-                        child: pw.Text(nombreReporte,
-                            style: const pw.TextStyle(fontSize: 11)),
-                      ),
-                      pw.SizedBox(height: gapY),
-
-                      header('💬', '03 COMENTARIOS'),
-                      pw.SizedBox(height: 6),
-                      pw.Container(height: hComentarios, child: lines(comentarios)),
-                      pw.SizedBox(height: gapY),
-
-                      header('⚠️', '04 INCIDENCIAS'),
-                      pw.SizedBox(height: 6),
-                      pw.Container(height: hIncidTxt, child: lines(incidenciasTxt)),
-                      pw.SizedBox(height: 6),
-                      imagesGrid(images: _incidenciasImgs, height: hIncidImgs),
+                      bulletLines(incidenciasTxt),
+                      pw.SizedBox(height: 8),
+                      imagesWrap('Sin imágenes de incidencias', _incidenciasImgs),
                     ],
                   ),
                 ),
-              ),
-
-              // -------- Columna Derecha --------
-              pw.Positioned(
-                left: side + colW + gapX,
-                top: top,
-                child: pw.Container(
-                  width: colW,
-                  child: pw.Column(
-                    crossAxisAlignment: pw.CrossAxisAlignment.stretch,
-                    children: [
-                      header('⛽', '05 RECURSOS UTILIZADOS'),
-                      pw.SizedBox(height: 6),
-                      pw.Container(height: hRecursos, child: lines(recursos)),
-                      pw.SizedBox(height: gapY),
-
-                      header('✅', '06 RECOMENDACIÓN'),
-                      pw.SizedBox(height: 6),
-                      pw.Container(height: hRecomend, child: lines(recomendaciones)),
-                      pw.SizedBox(height: gapY),
-
-                      header('🖼️', '07 IMÁGENES DEL REPORTE'),
-                      pw.SizedBox(height: 6),
-                      imagesGrid(images: _reporteImgs, height: hImgsRep),
-                    ],
-                  ),
+                section(
+                  emoji: '⛽',
+                  title: '05 RECURSOS UTILIZADOS',
+                  child: keyValueTable(recursos),
                 ),
-              ),
-            ],
-          );
-        },
+                section(
+                  emoji: '✅',
+                  title: '06 RECOMENDACIÓN',
+                  child: bulletLines(recomendaciones),
+                ),
+                section(
+                  emoji: '🖼️',
+                  title: '07 IMÁGENES DEL REPORTE',
+                  child: imagesWrap('Sin imágenes del reporte', _reporteImgs),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
 
