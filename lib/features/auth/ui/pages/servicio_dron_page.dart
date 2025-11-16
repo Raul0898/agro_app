@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -6,7 +7,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:path/path.dart' as p;
 import 'package:url_launcher/url_launcher.dart';
-import 'package:agro_app/widgets/upload_overlay.dart';
+import 'package:agro_app/widgets/transfer_progress_overlay.dart';
 
 class ServicioDronPage extends StatefulWidget {
   const ServicioDronPage({super.key});
@@ -26,6 +27,7 @@ class _ServicioDronPageState extends State<ServicioDronPage> {
   PlatformFile? _archivoSeleccionado;
 
   bool _enviando = false;
+  final TransferProgressController _progressController = TransferProgressController();
 
   final objetivos = const <String>[
     'Fotogrametría (ortomosaico)',
@@ -40,6 +42,7 @@ class _ServicioDronPageState extends State<ServicioDronPage> {
     _loteCtrl.dispose();
     _hectareasCtrl.dispose();
     _notasCtrl.dispose();
+    _progressController.dispose();
     super.dispose();
   }
 
@@ -112,12 +115,26 @@ class _ServicioDronPageState extends State<ServicioDronPage> {
                     : 'application/geo+json',
           ),
         );
-        showUploadOverlayForTask(
-          context,
-          uploadTask,
-          label: 'Subiendo archivo de referencia…',
-        );
-        await uploadTask;
+        StreamSubscription<TaskSnapshot>? sub;
+        _progressController.updateProgress(0, label: 'Subiendo archivo de referencia…');
+        _progressController.show(context, label: 'Subiendo archivo de referencia…');
+        try {
+          sub = uploadTask.snapshotEvents.listen((snapshot) {
+            final total = snapshot.totalBytes;
+            final progress = total == 0
+                ? 0.0
+                : (snapshot.bytesTransferred / total).clamp(0.0, 1.0);
+            _progressController.updateProgress(
+              progress.isNaN || progress.isInfinite ? 0.0 : progress,
+              label: 'Subiendo archivo de referencia…',
+            );
+          });
+          await uploadTask;
+          _progressController.updateProgress(1.0, label: 'Subiendo archivo de referencia…');
+        } finally {
+          await sub?.cancel();
+          _progressController.hide();
+        }
         await ref.getMetadata();
         downloadUrl = await ref.getDownloadURL();
       }

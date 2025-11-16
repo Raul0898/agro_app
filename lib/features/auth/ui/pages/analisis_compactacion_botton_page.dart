@@ -1,5 +1,6 @@
 // lib/features/auth/ui/pages/analisis_compactacion_botton_page.dart
 import 'dart:typed_data';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show rootBundle, TextInputFormatter, FilteringTextInputFormatter;
 import 'package:agro_app/features/auth/data/repo_queries.dart';
@@ -10,6 +11,7 @@ import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:agro_app/widgets/upload_overlay.dart';
+import 'package:agro_app/widgets/transfer_progress_overlay.dart';
 
 // ---------- Helpers de assets ----------
 Future<pw.ThemeData> _loadPdfTheme() async {
@@ -130,6 +132,7 @@ class _AnalisisCompactacionBottonPageState extends State<AnalisisCompactacionPag
   final List<TextInputFormatter> _numFormatters = [
     FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,3}$')),
   ];
+  final TransferProgressController _progressController = TransferProgressController();
 
   @override
   void initState() {
@@ -162,6 +165,7 @@ class _AnalisisCompactacionBottonPageState extends State<AnalisisCompactacionPag
       c.dispose();
     }
     _nombreCtrl.dispose();
+    _progressController.dispose();
     super.dispose();
   }
 
@@ -589,6 +593,30 @@ class _AnalisisCompactacionBottonPageState extends State<AnalisisCompactacionPag
     return null;
   }
 
+  Future<TaskSnapshot> _runUploadTaskWithOverlay(UploadTask uploadTask, String label) async {
+    StreamSubscription<TaskSnapshot>? sub;
+    _progressController.updateProgress(0, label: label);
+    _progressController.show(context, label: label);
+    try {
+      sub = uploadTask.snapshotEvents.listen((snapshot) {
+        final total = snapshot.totalBytes;
+        final progress = total == 0
+            ? 0.0
+            : (snapshot.bytesTransferred / total).clamp(0.0, 1.0);
+        _progressController.updateProgress(
+          progress.isNaN || progress.isInfinite ? 0.0 : progress,
+          label: label,
+        );
+      });
+      final snap = await uploadTask;
+      _progressController.updateProgress(1.0, label: label);
+      return snap;
+    } finally {
+      await sub?.cancel();
+      _progressController.hide();
+    }
+  }
+
   Future<bool> _saveNewResult({required String nombreArchivo, required List<double?> psiValues}) async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
@@ -621,12 +649,7 @@ class _AnalisisCompactacionBottonPageState extends State<AnalisisCompactacionPag
           customMetadata: { 'uid': user.uid },
         ),
       );
-      showUploadOverlayForTask(
-        context,
-        uploadTask,
-        label: 'Subiendo reporte…',
-      );
-      final snap = await uploadTask;
+      final snap = await _runUploadTaskWithOverlay(uploadTask, 'Subiendo reporte…');
 
       final downloadUrl = await snap.ref.getDownloadURL();
 
@@ -708,12 +731,7 @@ class _AnalisisCompactacionBottonPageState extends State<AnalisisCompactacionPag
         pdfBytes,
         SettableMetadata(contentType: 'application/pdf', customMetadata: {'uid': user.uid}),
       );
-      showUploadOverlayForTask(
-        context,
-        uploadTask,
-        label: 'Subiendo reporte…',
-      );
-      final snap = await uploadTask;
+      final snap = await _runUploadTaskWithOverlay(uploadTask, 'Subiendo reporte…');
 
       final downloadUrl = await snap.ref.getDownloadURL();
       final finalPath = ref.fullPath;

@@ -19,7 +19,7 @@ import 'package:agro_app/features/auth/ui/pages/analisis_compactacion_botton_pag
 import 'package:agro_app/features/auth/ui/pages/reporte_actividad_form_page.dart';
 import 'package:agro_app/features/auth/ui/pages/reporte_actividad_nutrientes.dart';
 import 'package:agro_app/features/auth/ui/pages/analisis_nutrientes_botton_page.dart';
-import 'package:agro_app/widgets/upload_overlay.dart';
+import 'package:agro_app/widgets/transfer_progress_overlay.dart';
 
 class SectionOption {
   final String label;
@@ -64,11 +64,18 @@ class _AnalysisSoilPageState extends State<AnalysisSoilPage> {
 
   final List<File> _uploadedImages = [];
   final List<File> _uploadedPdfs = [];
+  final TransferProgressController _progressController = TransferProgressController();
 
   @override
   void initState() {
     super.initState();
     _cargarUnidadYSecciones();
+  }
+
+  @override
+  void dispose() {
+    _progressController.dispose();
+    super.dispose();
   }
 
   Future<void> _cargarUnidadYSecciones() async {
@@ -235,18 +242,10 @@ class _AnalysisSoilPageState extends State<AnalysisSoilPage> {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) { _snack('Debes iniciar sesión para subir archivos.', error: true); return; }
 
-    final progressCtrl = StreamController<UploadOverlayStatus>();
-    final disposeOverlay = showUploadOverlayForStream(
-      context,
-      progressCtrl.stream,
-      label: 'Subiendo archivos…',
-    );
+    _progressController.updateProgress(0, label: 'Subiendo archivos…');
+    _progressController.show(context, label: 'Subiendo archivos…');
 
     try {
-      progressCtrl.add(UploadOverlayStatus(
-        progress: archivos.isEmpty ? 1.0 : 0.0,
-        detail: 'Completados: 0 / ${archivos.length}',
-      ));
       int subidos = 0;
       for (int i = 0; i < archivos.length; i++) {
         final f = archivos[i];
@@ -262,38 +261,58 @@ class _AnalysisSoilPageState extends State<AnalysisSoilPage> {
             },
           ),
         );
-        final snap = await uploadTask;
-        final url = await snap.ref.getDownloadURL();
 
-        // ---- escribimos metadata + TTL (expireAt) ----
-        final meta = {
-          'uid': user.uid,
-          'unidad': _unidadActual,
-          'seccion': _seccionParaRuta(),
-          'tipoArchivo': tipoArchivo,
-          'downloadUrl': url,
-          'storagePath': path,
-          'fecha': Timestamp.fromDate(DateTime.now()),
-          'expireAt': _expireAt12M(), // <-- TTL 12 meses
-        };
+        StreamSubscription<TaskSnapshot>? sub;
+        try {
+          sub = uploadTask.snapshotEvents.listen((snapshot) {
+            final total = snapshot.totalBytes;
+            final taskProgress = total == 0
+                ? 0.0
+                : (snapshot.bytesTransferred / total).clamp(0.0, 1.0);
+            final fraction = archivos.isEmpty ? 0.0 : 1 / archivos.length;
+            final base = archivos.isEmpty ? 0.0 : subidos / archivos.length;
+            final combined = base + (taskProgress.isNaN || taskProgress.isInfinite ? 0.0 : taskProgress) * fraction;
+            _progressController.updateProgress(
+              combined.clamp(0.0, 1.0),
+              label: 'Subiendo archivos… (${subidos + 1}/${archivos.length})',
+            );
+          });
 
-        // 1 doc por archivo: id determinístico
-        final docId = path.replaceAll('/', '__');
-        await FirebaseFirestore.instance.collection(registrarEn)
-            .doc(docId).set(meta, SetOptions(merge: true));
+          final snap = await uploadTask;
+          final url = await snap.ref.getDownloadURL();
+
+          // ---- escribimos metadata + TTL (expireAt) ----
+          final meta = {
+            'uid': user.uid,
+            'unidad': _unidadActual,
+            'seccion': _seccionParaRuta(),
+            'tipoArchivo': tipoArchivo,
+            'downloadUrl': url,
+            'storagePath': path,
+            'fecha': Timestamp.fromDate(DateTime.now()),
+            'expireAt': _expireAt12M(), // <-- TTL 12 meses
+          };
+
+          // 1 doc por archivo: id determinístico
+          final docId = path.replaceAll('/', '__');
+          await FirebaseFirestore.instance.collection(registrarEn)
+              .doc(docId).set(meta, SetOptions(merge: true));
+        } finally {
+          await sub?.cancel();
+        }
 
         subidos++;
-        progressCtrl.add(UploadOverlayStatus(
-          progress: archivos.isEmpty ? 1.0 : subidos / archivos.length,
-          detail: 'Completados: $subidos / ${archivos.length}',
-        ));
+        _progressController.updateProgress(
+          archivos.isEmpty ? 1.0 : subidos / archivos.length,
+          label: 'Subiendo archivos… ($subidos/${archivos.length})',
+        );
       }
+      _progressController.updateProgress(1.0, label: 'Subiendo archivos…');
       _snack('Archivos subidos correctamente.');
     } catch (e) {
       _snack('Error al subir archivos: $e', error: true);
     } finally {
-      await progressCtrl.close();
-      disposeOverlay();
+      _progressController.hide();
     }
   }
 

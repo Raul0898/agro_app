@@ -1,5 +1,6 @@
 // lib/features/auth/ui/pages/reporte_actividad_nutrientes.dart
 
+import 'dart:async';
 import 'dart:typed_data';
 import 'package:agro_app/core/firestore/repo_queries.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -13,7 +14,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
-import 'package:agro_app/widgets/upload_overlay.dart';
+import 'package:agro_app/widgets/transfer_progress_overlay.dart';
 
 class ReporteActividadNutrientesPage extends StatefulWidget {
   const ReporteActividadNutrientesPage({super.key});
@@ -35,6 +36,8 @@ class _ReporteActividadNutrientesPageState extends State<ReporteActividadNutrien
   String _seccion = 'seccion_unica';
   String _nombrePerfil = 'No asignado';
   bool _argsLoaded = false;
+
+  final TransferProgressController _progressController = TransferProgressController();
 
   int get _year => DateTime.now().year;
   int get _month => DateTime.now().month;
@@ -131,6 +134,7 @@ class _ReporteActividadNutrientesPageState extends State<ReporteActividadNutrien
     _combustibleCtrl.dispose();
     _herramientasCtrl.dispose();
     _recomendacionesCtrl.dispose();
+    _progressController.dispose();
     super.dispose();
   }
 
@@ -423,6 +427,30 @@ class _ReporteActividadNutrientesPageState extends State<ReporteActividadNutrien
     return 'unidades_info/$u/analisis_suelo/reportes/reporte_actividad_analisis_nutrientes/$_year/${_month2()}/$name';
   }
 
+  Future<TaskSnapshot> _awaitUpload(UploadTask uploadTask, String label) async {
+    StreamSubscription<TaskSnapshot>? sub;
+    _progressController.updateProgress(0, label: label);
+    _progressController.show(context, label: label);
+    try {
+      sub = uploadTask.snapshotEvents.listen((snapshot) {
+        final total = snapshot.totalBytes;
+        final progress = total == 0
+            ? 0.0
+            : (snapshot.bytesTransferred / total).clamp(0.0, 1.0);
+        _progressController.updateProgress(
+          progress.isNaN || progress.isInfinite ? 0.0 : progress,
+          label: label,
+        );
+      });
+      final snap = await uploadTask;
+      _progressController.updateProgress(1.0, label: label);
+      return snap;
+    } finally {
+      await sub?.cancel();
+      _progressController.hide();
+    }
+  }
+
   Future<(String path, String url)> _uploadBytes(Uint8List data, String path,
       {String contentType = 'image/jpeg'}) async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
@@ -436,12 +464,7 @@ class _ReporteActividadNutrientesPageState extends State<ReporteActividadNutrien
       },
     );
     final uploadTask = ref.putData(data, metadata);
-    showUploadOverlayForTask(
-      context,
-      uploadTask,
-      label: 'Subiendo archivo…',
-    );
-    await uploadTask;
+    await _awaitUpload(uploadTask, 'Subiendo archivo…');
     final url = await ref.getDownloadURL();
     return (path, url);
   }
