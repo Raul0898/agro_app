@@ -52,31 +52,45 @@ class _SelectorContextoPageState extends State<SelectorContextoPage> {
         if (mounted) setState(() => _loading = false);
         return;
       }
-      final List<String> unidadesAutorizadasIds = List<String>.from(userDoc.data()?['unidadesAutorizadas'] ?? []);
+      final List<String> unidadesAutorizadasIds =
+          _dedupePreservingOrder(List<String>.from(userDoc.data()?['unidadesAutorizadas'] ?? []));
 
       if (unidadesAutorizadasIds.isEmpty) {
         if (mounted) setState(() => _loading = false);
         return;
       }
 
-      // 2. Buscar los detalles de cada unidad autorizada en el catálogo central
-      final unidadesSnapshot = await FirebaseFirestore.instance
-          .collection('unidades_catalog')
-          .where(FieldPath.documentId, whereIn: unidadesAutorizadasIds)
-          .get();
-
+      // 2. Buscar los detalles de cada unidad autorizada en el catálogo central.
+      // Firestore limita los filtros `whereIn` a 10 elementos, así que se
+      // realizan las consultas en lotes para usuarios con más unidades.
       final Map<String, _UnidadInfo> unidadesCargadas = {};
-      for (var doc in unidadesSnapshot.docs) {
-        final data = doc.data();
-        final nombre = data['nombre'] as String? ?? doc.id;
-        final cultivos = List<String>.from(data['cultivos'] ?? []);
-        unidadesCargadas[doc.id] = _UnidadInfo(nombre: nombre, cultivos: cultivos);
+      for (final chunk in _chunked(unidadesAutorizadasIds, 10)) {
+        final unidadesSnapshot = await FirebaseFirestore.instance
+            .collection('unidades_catalog')
+            .where(FieldPath.documentId, whereIn: chunk)
+            .get();
+
+        for (var doc in unidadesSnapshot.docs) {
+          final data = doc.data();
+          final nombre = data['nombre'] as String? ?? doc.id;
+          final cultivos = List<String>.from(data['cultivos'] ?? []);
+          unidadesCargadas[doc.id] = _UnidadInfo(nombre: nombre, cultivos: cultivos);
+        }
+      }
+
+      final Map<String, _UnidadInfo> unidadesOrdenadas = {};
+      for (final id in unidadesAutorizadasIds) {
+        final info = unidadesCargadas[id];
+        if (info != null) {
+          unidadesOrdenadas[id] = info;
+        }
       }
 
       if (mounted) {
         setState(() {
-          _unidadesDisponibles.clear();
-          _unidadesDisponibles.addAll(unidadesCargadas);
+          _unidadesDisponibles
+            ..clear()
+            ..addAll(unidadesOrdenadas);
           _loading = false;
         });
       }
@@ -116,8 +130,8 @@ class _SelectorContextoPageState extends State<SelectorContextoPage> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('No se pudo guardar la selección: $e')),
-      );
+          SnackBar(content: Text('No se pudo guardar la selección: $e')),
+        );
       }
     }
   }
@@ -230,6 +244,27 @@ class _SelectorContextoPageState extends State<SelectorContextoPage> {
       fillColor: Colors.white.withOpacity(0.7),
       border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
     );
+  }
+
+  List<T> _dedupePreservingOrder<T>(List<T> items) {
+    final seen = <T>{};
+    final result = <T>[];
+    for (final item in items) {
+      if (seen.add(item)) {
+        result.add(item);
+      }
+    }
+    return result;
+  }
+
+  Iterable<List<T>> _chunked<T>(List<T> items, int chunkSize) sync* {
+    if (chunkSize <= 0) {
+      throw ArgumentError.value(chunkSize, 'chunkSize', 'Debe ser mayor a cero');
+    }
+    for (var i = 0; i < items.length; i += chunkSize) {
+      final end = (i + chunkSize) > items.length ? items.length : i + chunkSize;
+      yield items.sublist(i, end);
+    }
   }
 }
 
