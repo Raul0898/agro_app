@@ -453,18 +453,20 @@ class _AnalisisCompactacionBottonPageState extends State<AnalisisCompactacionPag
             pw.SizedBox(height: kHeaderSafeSpace),
             headerText(),
             pw.SizedBox(height: 10),
-            pw.Table(
-              border: pw.TableBorder.all(color: PdfColor.fromInt(0xFFD9D9D9)),
-              defaultVerticalAlignment: pw.TableCellVerticalAlignment.middle,
-              children: rows,
-            ),
-            pw.SizedBox(height: 12),
-            promsBox(),
-            pw.SizedBox(height: 12),
-            recoBox(),
-            pw.SizedBox(height: 8),
-            legendTextBlock(),
-          ];
+          pw.Table(
+            border: pw.TableBorder.all(color: PdfColor.fromInt(0xFFD9D9D9)),
+            defaultVerticalAlignment: pw.TableCellVerticalAlignment.middle,
+            children: rows,
+          ),
+          pw.SizedBox(height: 12),
+          promsBox(),
+          pw.NewPage(),
+          pw.SizedBox(height: kHeaderSafeSpace),
+          pw.SizedBox(height: 12),
+          recoBox(),
+          pw.SizedBox(height: 8),
+          legendTextBlock(),
+        ];
 
           if (esRojo) {
             widgets
