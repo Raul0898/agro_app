@@ -51,6 +51,41 @@ flutter:
     - "IMG/Norcalogogris.png"
     - "IMG/agronomo-digital-1.jpg"
     - "IMG/Logo1.png"
+    - "IMG/icono3.png"
+    - "IMG/icono4.png"
+    - "IMG/icono5.png"
+    - "IMG/icono6.png"
+    - "IMG/icono7.png"
+    - "IMG/icono8.png"
+    - "IMG/icono9.png"
+    - "IMG/i3.png"
+    - "IMG/i4.png"
+    - "IMG/i5.png"
+    - "IMG/i6.png"
+    - "IMG/i7.png"
+    - "IMG/i8.png"
+    - "IMG/i9.png"
+    - "IMG/i10.png"
+    - "IMG/i11.png"
+    - "IMG/i12.png"
+    - "IMG/i13.png"
+    - "IMG/i14.png"
+    - "IMG/i15.png"
+    - "IMG/i16.png"
+    - "IMG/i17.png"
+    - "IMG/i18.png"
+    - "IMG/i19.png"
+    - "IMG/i20.png"
+    - "IMG/i21.png"
+    - "IMG/i22.png"
+    - "IMG/i23.png"
+    - "IMG/i24.png"
+    - "IMG/i25.png"
+    - "IMG/i26.png"
+    - "IMG/i27.png"
+    - "IMG/i28.png"
+    - "IMG/i29.png"
+    - "IMG/i30.png"
     - "IMG/recomendaciones.png"
     - "IMG/portada_recomendaciones_2.jpg"
     - "IMG/subsuelo.jpg"
@@ -85,12 +120,13 @@ flutter:
 # ===============================
 # ÍCONO DE LA APP (Android)
 # ===============================
-flutter_icons:
+flutter_launcher_icons:
   android: true
-  ios: false
-  image_path_android: IMG/Logo1.png
-  adaptive_icon_foreground: IMG/Logo1.png
-  adaptive_icon_background: "#FFFFFFFF"   # FONDO BLANCO
+  ios: true
+  image_path: IMG/i22.png
+  adaptive_icon_foreground: IMG/i22.png
+  adaptive_icon_background: "#FFFFFF"
+
   min_sdk_android: 21
 
 # ===============================
