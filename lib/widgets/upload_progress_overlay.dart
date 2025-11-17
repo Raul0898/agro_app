@@ -91,7 +91,7 @@ class _UploadProgressOverlayState extends State<UploadProgressOverlay>
     final label = widget.label ?? 'Subiendo… ${percent.toStringAsFixed(0)}%';
 
     return Material(
-      color: Colors.black54,
+      color: Colors.orange,
       child: Center(
         child: Card(
           elevation: 8,
@@ -116,8 +116,8 @@ class _UploadProgressOverlayState extends State<UploadProgressOverlay>
                     },
                     child: Image.asset(
                       'IMG/i22.png',
-                      width: 96,
-                      height: 96,
+                      width: 110,
+                      height: 110,
                       fit: BoxFit.contain,
                     ),
                   ),

@@ -93,7 +93,7 @@ class TransferProgressOverlay extends StatelessWidget {
                 borderRadius: BorderRadius.circular(16),
                 boxShadow: const [
                   BoxShadow(
-                    color: Colors.black26,
+                    color: Colors.orange,
                     blurRadius: 12,
                     offset: Offset(0, 6),
                   ),
@@ -104,8 +104,8 @@ class TransferProgressOverlay extends StatelessWidget {
                 children: [
                   Image.asset(
                     'IMG/i22.png',
-                    width: 120,
-                    height: 120,
+                    width: 150,
+                    height: 150,
                     fit: BoxFit.contain,
                   ),
                   const SizedBox(height: 16),
@@ -114,7 +114,7 @@ class TransferProgressOverlay extends StatelessWidget {
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
                           fontWeight: FontWeight.bold,
-                          color: Colors.black87,
+                          color: Colors.black,
                         ),
                   ),
                   const SizedBox(height: 16),
@@ -124,7 +124,7 @@ class TransferProgressOverlay extends StatelessWidget {
                     '$percent%',
                     style: Theme.of(context).textTheme.titleLarge?.copyWith(
                           fontWeight: FontWeight.w700,
-                          color: Colors.black87,
+                          color: Colors.black,
                         ),
                   ),
                 ],
