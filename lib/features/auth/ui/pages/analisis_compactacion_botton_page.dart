@@ -472,7 +472,7 @@ class _AnalisisCompactacionBottonPageState extends State<AnalisisCompactacionPag
               ..add(redCaseNotesBlock());
           }
 
-          if (subsueloImage != null) {
+          if (esRojo && subsueloImage != null) {
             widgets
               ..add(pw.SizedBox(height: 12))
               ..add(subsueloImageBlock());
