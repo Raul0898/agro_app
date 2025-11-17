@@ -103,7 +103,7 @@ class TransferProgressOverlay extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Image.asset(
-                    'assets/IMG/Logo1.png',
+                    'IMG/i22.png',
                     width: 120,
                     height: 120,
                     fit: BoxFit.contain,

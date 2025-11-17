@@ -115,7 +115,7 @@ class _UploadProgressOverlayState extends State<UploadProgressOverlay>
                       );
                     },
                     child: Image.asset(
-                      'IMG/Logo1.png',
+                      'IMG/i22.png',
                       width: 96,
                       height: 96,
                       fit: BoxFit.contain,
