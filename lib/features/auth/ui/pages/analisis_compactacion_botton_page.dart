@@ -428,22 +428,22 @@ class _AnalisisCompactacionBottonPageState extends State<AnalisisCompactacionPag
       ),
     );
 
-    final pageTheme = portadaImage == null
-        ? null
-        : pw.PageTheme(
-            buildBackground: (context) => pw.FullPage(
-              ignoreMargins: true,
-              child: pw.Image(
-                portadaImage,
-                fit: pw.BoxFit.cover,
+    final pageTheme = pw.PageTheme(
+      pageFormat: PdfPageFormat.a4,
+      margin: const pw.EdgeInsets.fromLTRB(24, 28, 24, 28),
+      buildBackground: portadaImage == null
+          ? null
+          : (context) => pw.FullPage(
+                ignoreMargins: true,
+                child: pw.Image(
+                  portadaImage,
+                  fit: pw.BoxFit.cover,
+                ),
               ),
-            ),
-          );
+    );
 
     doc.addPage(
       pw.MultiPage(
-        pageFormat: PdfPageFormat.a4,
-        margin: const pw.EdgeInsets.fromLTRB(24, 28, 24, 28),
         pageTheme: pageTheme,
         build: (ctx) {
           final widgets = <pw.Widget>[
