@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 
+const _kImageBackground = Color(0xFFF7F3EA);
+const _kCorporateOrange = Color(0xFFF2AE2E);
+
 class TransferProgressController extends ChangeNotifier {
   double _progress = 0.0;
   bool _visible = false;
@@ -89,11 +92,11 @@ class TransferProgressOverlay extends StatelessWidget {
               width: 320,
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 28),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: _kImageBackground,
                 borderRadius: BorderRadius.circular(16),
                 boxShadow: const [
                   BoxShadow(
-                    color: Colors.orange,
+                    color: _kCorporateOrange,
                     blurRadius: 12,
                     offset: Offset(0, 6),
                   ),
@@ -118,7 +121,12 @@ class TransferProgressOverlay extends StatelessWidget {
                         ),
                   ),
                   const SizedBox(height: 16),
-                  LinearProgressIndicator(value: progress),
+                  LinearProgressIndicator(
+                    value: progress,
+                    backgroundColor: Colors.white54,
+                    valueColor:
+                        const AlwaysStoppedAnimation(_kCorporateOrange),
+                  ),
                   const SizedBox(height: 10),
                   Text(
                     '$percent%',
