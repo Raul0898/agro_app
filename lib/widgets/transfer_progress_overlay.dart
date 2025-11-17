@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-const _kImageBackground = Color(0xFFF7F3EA);
+const _kImageBackground = Color(0xFFF9F6F3);
 const _kCorporateOrange = Color(0xFFF2AE2E);
 
 class TransferProgressController extends ChangeNotifier {
@@ -106,9 +106,9 @@ class TransferProgressOverlay extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Image.asset(
-                    'IMG/i22.png',
-                    width: 150,
-                    height: 150,
+                    'IMG/i22_transparent.png',
+                    width: 200,
+                    height: 200,
                     fit: BoxFit.contain,
                   ),
                   const SizedBox(height: 16),
@@ -123,7 +123,7 @@ class TransferProgressOverlay extends StatelessWidget {
                   const SizedBox(height: 16),
                   LinearProgressIndicator(
                     value: progress,
-                    backgroundColor: Colors.white54,
+                    backgroundColor: Colors.white,
                     valueColor:
                         const AlwaysStoppedAnimation(_kCorporateOrange),
                   ),

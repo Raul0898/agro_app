@@ -58,6 +58,9 @@ flutter:
     - "IMG/icono7.png"
     - "IMG/icono8.png"
     - "IMG/icono9.png"
+    - "IMG/i4_transparent.png"
+    - "IMG/i15_transparent.png"
+    - "IMG/i22_transparent.png"
     - "IMG/i3.png"
     - "IMG/i4.png"
     - "IMG/i5.png"
@@ -123,8 +126,8 @@ flutter:
 flutter_launcher_icons:
   android: true
   ios: true
-  image_path: IMG/i22.png
-  adaptive_icon_foreground: IMG/i22.png
+  image_path: IMG/i6.png
+  adaptive_icon_foreground: IMG/i6.png
   adaptive_icon_background: "#FFFFFF"
 
   min_sdk_android: 21
