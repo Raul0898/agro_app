@@ -448,9 +448,9 @@ class _AnalisisCompactacionBottonPageState extends State<AnalisisCompactacionPag
     doc.addPage(
       pw.MultiPage(
         pageTheme: pageTheme,
+        header: (_) => pw.SizedBox(height: kHeaderSafeSpace),
         build: (ctx) {
           final widgets = <pw.Widget>[
-            pw.SizedBox(height: kHeaderSafeSpace),
             headerText(),
             pw.SizedBox(height: 10),
           pw.Table(
