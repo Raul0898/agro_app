@@ -1086,7 +1086,10 @@ class _AnalisisCompactacionBottonPageState extends State<AnalisisCompactacionPag
                       padding: const EdgeInsets.symmetric(vertical: 12),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                     ),
-                    onPressed: _emitirRecomendacion,
+                    onPressed: () {
+                      FocusScope.of(context).unfocus();
+                      _emitirRecomendacion();
+                    },
                     label: const Text('Emitir Recomendación', style: TextStyle(fontWeight: FontWeight.w700)),
                   ),
                 ),
