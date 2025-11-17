@@ -433,11 +433,11 @@ class _AnalisisCompactacionBottonPageState extends State<AnalisisCompactacionPag
       margin: const pw.EdgeInsets.fromLTRB(24, 28, 24, 28),
       buildBackground: portadaImage == null
           ? null
-          : (context) => pw.FullPage(
-                ignoreMargins: true,
+          : (context) => pw.Padding(
+                padding: const pw.EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                 child: pw.Image(
                   portadaImage,
-                  fit: pw.BoxFit.cover,
+                  fit: pw.BoxFit.contain,
                 ),
               ),
     );
