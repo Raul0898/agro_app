@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-const _kImageBackground = Color(0xFFF7F3EA);
+const _kImageBackground = Color(0xFFF9F6F3);
 const _kCorporateOrange = Color(0xFFF2AE2E);
 
 class UploadProgressOverlay extends StatefulWidget {
@@ -94,7 +94,7 @@ class _UploadProgressOverlayState extends State<UploadProgressOverlay>
     final label = widget.label ?? 'Subiendo… ${percent.toStringAsFixed(0)}%';
 
     return Material(
-      color: Colors.black.withOpacity(0.6),
+      color: Colors.white.withOpacity(0.6),
       child: Center(
         child: Card(
           elevation: 8,
@@ -120,9 +120,9 @@ class _UploadProgressOverlayState extends State<UploadProgressOverlay>
                       );
                     },
                     child: Image.asset(
-                      'IMG/i22.png',
-                      width: 110,
-                      height: 110,
+                      'IMG/i22_transparent.png',
+                      width: 150,
+                      height: 150,
                       fit: BoxFit.contain,
                     ),
                   ),
@@ -147,7 +147,7 @@ class _UploadProgressOverlayState extends State<UploadProgressOverlay>
                     width: 220,
                     child: LinearProgressIndicator(
                       value: _progress,
-                      backgroundColor: Colors.white54,
+                      backgroundColor: Colors.white,
                       valueColor:
                           const AlwaysStoppedAnimation(_kCorporateOrange),
                     ),
