@@ -428,6 +428,9 @@ class _AnalisisCompactacionBottonPageState extends State<AnalisisCompactacionPag
       ),
     );
 
+    const double kHeaderSafeSpace = 90;
+    const double kFooterSafeSpace = 70;
+
     final pageTheme = pw.PageTheme(
       pageFormat: PdfPageFormat.a4,
       margin: const pw.EdgeInsets.fromLTRB(24, 28, 24, 28),
@@ -447,6 +450,7 @@ class _AnalisisCompactacionBottonPageState extends State<AnalisisCompactacionPag
         pageTheme: pageTheme,
         build: (ctx) {
           final widgets = <pw.Widget>[
+            pw.SizedBox(height: kHeaderSafeSpace),
             headerText(),
             pw.SizedBox(height: 10),
             pw.Table(
@@ -482,6 +486,9 @@ class _AnalisisCompactacionBottonPageState extends State<AnalisisCompactacionPag
                 child: pw.Text('Generado por IDRA', style: const pw.TextStyle(fontSize: 9)),
               ),
             );
+
+          // Mantener zona segura inferior para el mismo fondo en cualquier página nueva
+          widgets.add(pw.SizedBox(height: kFooterSafeSpace));
 
           return widgets;
         },
