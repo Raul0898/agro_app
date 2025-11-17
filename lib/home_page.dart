@@ -485,7 +485,7 @@ class _HomePageState extends State<HomePage> {
         return Scaffold(
           key: _scaffoldKey,
           appBar: AppBar(
-            backgroundColor: const Color(0xFF151f28),
+            backgroundColor: const Color(0xFF000000),
             elevation: 0,
             centerTitle: false,
             iconTheme: const IconThemeData(color: Colors.white),
@@ -728,7 +728,7 @@ class _HomePageState extends State<HomePage> {
                 const SizedBox(height: 6),
                 RichText(
                   text: TextSpan(
-                    style: const TextStyle(color: Color(0xFF151f28), fontSize: 14),
+                    style: const TextStyle(color: Color(0xFF000000), fontSize: 14),
                     children: [
                       const TextSpan(text: 'Unidad: ', style: TextStyle(fontWeight: FontWeight.w600)),
                       TextSpan(text: _unidadSeleccionada),
@@ -737,7 +737,7 @@ class _HomePageState extends State<HomePage> {
                 ),
                 RichText(
                   text: TextSpan(
-                    style: const TextStyle(color: Color(0xFF151f28), fontSize: 13),
+                    style: const TextStyle(color: Color(0xFF000000), fontSize: 13),
                     children: [
                       const TextSpan(text: 'Cultivo: ', style: TextStyle(fontWeight: FontWeight.w600)),
                       TextSpan(text: _cultivoSeleccionado),
@@ -750,10 +750,10 @@ class _HomePageState extends State<HomePage> {
           const SizedBox(width: 1),
           // ← Flecha dentro del header (al lado de la foto / datos)
           Material(
-            color: Colors.orangeAccent,
+            color: Colors.white,
             shape: const CircleBorder(),
             child: IconButton(
-              icon: const Icon(Icons.arrow_back_ios_new, size: 18, color: Color(0xFF151f28)),
+              icon: const Icon(Icons.arrow_back_ios_new, size: 18, color: Color(0xFF000000)),
               tooltip: 'Selector de Contexto',
               onPressed: () {
                 // Cierra el Drawer y navega
