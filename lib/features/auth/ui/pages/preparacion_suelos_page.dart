@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:intl/intl.dart';
@@ -717,8 +718,7 @@ class _PreparacionSuelosPageState extends State<PreparacionSuelosPage> {
 
       return await _fromSnap(snap);
     } catch (e) {
-      // ignore: avoid_print
-      print(
+      debugPrint(
         '[PrepSuelos] _ultimoDeSeccion unidad=$unidad seccion=$seccionId error: $e',
       );
       return null;
