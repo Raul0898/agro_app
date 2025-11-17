@@ -326,7 +326,7 @@ class _AnalisisCompactacionBottonPageState extends State<AnalisisCompactacionPag
       ),
     );
 
-    pw.Widget leyendaYNotas() => pw.Column(
+    pw.Widget legendTextBlock() => pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
         pw.Row(
@@ -338,146 +338,153 @@ class _AnalisisCompactacionBottonPageState extends State<AnalisisCompactacionPag
           ],
         ),
         pw.SizedBox(height: 8),
-        pw.Column(
-          crossAxisAlignment: pw.CrossAxisAlignment.start,
-          children: [
-            pw.Text(
-              'LC : Labranza de Conservacion',
+        pw.Text(
+          'LC : Labranza de Conservacion',
+          style: pw.TextStyle(
+            fontSize: 11,
+            fontWeight: pw.FontWeight.bold,
+          ),
+        ),
+        pw.SizedBox(height: 4),
+        pw.Text(
+          'La labranza de conservacion es una tecnica conservacionista que tiene como objetivo acondicionar el suelo para el establecimiento del cultivo realizando un minimo o nulo movimiento del suelo, para posteriormente realizar la siembra directa.',
+          style: const pw.TextStyle(fontSize: 10),
+        ),
+      ],
+    );
+
+    pw.Widget redCaseNotesBlock() => pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
+      children: [
+        pw.Container(
+          width: double.infinity,
+          padding: const pw.EdgeInsets.symmetric(vertical: 6),
+          color: PdfColor.fromInt(0xFFF0B429),
+          child: pw.Center(
+            child: pw.Text(
+              'Recomendaciones',
               style: pw.TextStyle(
-                fontSize: 11,
+                fontSize: 12,
                 fontWeight: pw.FontWeight.bold,
               ),
             ),
-            pw.SizedBox(height: 4),
-            pw.Text(
-              'La labranza de conservacion es una tecnica conservacionista que tiene como objetivo acondicionar el suelo para el establecimiento del cultivo realizando un minimo o nulo movimiento del suelo, para posteriormente realizar la siembra directa.',
-              style: pw.TextStyle(
-                fontSize: 10,
+          ),
+        ),
+        pw.SizedBox(height: 8),
+        pw.Row(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            pw.Expanded(
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Text(
+                    'Descompactacion del Suelo',
+                    style: pw.TextStyle(
+                      fontSize: 11,
+                      fontWeight: pw.FontWeight.bold,
+                      fontStyle: pw.FontStyle.italic,
+                    ),
+                  ),
+                  pw.SizedBox(height: 4),
+                  pw.Text(
+                    'Si se requiere SUBSUELO y si la compactacion de 200 psi o mas se presenta a mas de 15 cm de profundidad o en todo el perfil de suelo, sera necesario dar un paso de subsuelo o subsuelo/multiarado. Esta labor debera realizarse de preferencia de forma cruzada en un angulo de 35° de la direccion de los surcos.',
+                    style: const pw.TextStyle(fontSize: 10),
+                  ),
+                ],
+              ),
+            ),
+            pw.SizedBox(width: 8),
+            pw.Expanded(
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Text(
+                    'Trafico Controlado',
+                    style: pw.TextStyle(
+                      fontSize: 11,
+                      fontWeight: pw.FontWeight.bold,
+                      fontStyle: pw.FontStyle.italic,
+                    ),
+                  ),
+                  pw.SizedBox(height: 4),
+                  pw.Text(
+                    'Para evitar la compactacion del suelo se debera establecer como politica de trafico que todo vehiculo que ingrese a la parcela, incluida la trilladora, lo haga sobre surcos definidos, cuidando que sus llantas solo rueden por el fondo del surco. En cuanto a los camiones de carga, estos deben quedarse en las calles laterales y la combinada debe trasladarse hacia el camion para hacer la descarga.',
+                    style: const pw.TextStyle(fontSize: 10),
+                  ),
+                ],
               ),
             ),
           ],
         ),
-        if (esRojo) ...[
-          pw.SizedBox(height: 12),
-          pw.Container(
-            width: double.infinity,
-            padding: const pw.EdgeInsets.symmetric(vertical: 6),
-            color: PdfColor.fromInt(0xFFF0B429),
-            child: pw.Center(
-              child: pw.Text(
-                'Recomendaciones',
-                style: pw.TextStyle(
-                  fontSize: 12,
-                  fontWeight: pw.FontWeight.bold,
-                ),
-              ),
-            ),
-          ),
-          pw.SizedBox(height: 8),
-          pw.Row(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: [
-              pw.Expanded(
-                child: pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.start,
-                  children: [
-                    pw.Text(
-                      'Descompactacion del Suelo',
-                      style: pw.TextStyle(
-                        fontSize: 11,
-                        fontWeight: pw.FontWeight.bold,
-                        fontStyle: pw.FontStyle.italic,
-                      ),
-                    ),
-                    pw.SizedBox(height: 4),
-                    pw.Text(
-                      'Si se requiere SUBSUELO y si la compactacion de 200 psi o mas se presenta a mas de 15 cm de profundidad o en todo el perfil de suelo, sera necesario dar un paso de subsuelo o subsuelo/multiarado. Esta labor debera realizarse de preferencia de forma cruzada en un angulo de 35° de la direccion de los surcos.',
-                      style: pw.TextStyle(fontSize: 10),
-                    ),
-                  ],
-                ),
-              ),
-              pw.SizedBox(width: 8),
-              pw.Expanded(
-                child: pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.start,
-                  children: [
-                    pw.Text(
-                      'Trafico Controlado',
-                      style: pw.TextStyle(
-                        fontSize: 11,
-                        fontWeight: pw.FontWeight.bold,
-                        fontStyle: pw.FontStyle.italic,
-                      ),
-                    ),
-                    pw.SizedBox(height: 4),
-                    pw.Text(
-                      'Para evitar la compactacion del suelo se debera establecer como politica de trafico que todo vehiculo que ingrese a la parcela, incluida la trilladora, lo haga sobre surcos definidos, cuidando que sus llantas solo rueden por el fondo del surco. En cuanto a los camiones de carga, estos deben quedarse en las calles laterales y la combinada debe trasladarse hacia el camion para hacer la descarga.',
-                      style: pw.TextStyle(fontSize: 10),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          pw.SizedBox(height: 12),
-          if (subsueloImage != null)
-            pw.Center(
-              child: pw.Image(
-                subsueloImage,
-                width: 250,
-                fit: pw.BoxFit.contain,
-              ),
-            ),
-        ],
       ],
     );
 
-    pw.Widget contenidoAnalisis() => pw.Column(
-      crossAxisAlignment: pw.CrossAxisAlignment.start,
-      children: [
-        headerText(),
-        pw.SizedBox(height: 10),
-        pw.Table(
-          border: pw.TableBorder.all(color: PdfColor.fromInt(0xFFD9D9D9)),
-          defaultVerticalAlignment: pw.TableCellVerticalAlignment.middle,
-          children: rows,
-        ),
-        pw.SizedBox(height: 12),
-        promsBox(),
-        pw.SizedBox(height: 12),
-        recoBox(),
-        pw.SizedBox(height: 8),
-        leyendaYNotas(),
-        pw.SizedBox(height: 10),
-        pw.Align(
-          alignment: pw.Alignment.centerRight,
-          child: pw.Text('Generado por IDRA', style: pw.TextStyle(fontSize: 9)),
-        ),
-      ],
+    pw.Widget subsueloImageBlock() => pw.Center(
+      child: pw.Image(
+        subsueloImage!,
+        width: 250,
+        fit: pw.BoxFit.contain,
+      ),
     );
+
+    final pageTheme = portadaImage == null
+        ? null
+        : pw.PageTheme(
+            buildBackground: (context) => pw.FullPage(
+              ignoreMargins: true,
+              child: pw.Image(
+                portadaImage,
+                fit: pw.BoxFit.cover,
+              ),
+            ),
+          );
 
     doc.addPage(
       pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
         margin: const pw.EdgeInsets.fromLTRB(24, 28, 24, 28),
-        build: (ctx) => [
-          pw.Stack(
-            children: [
-              if (portadaImage != null)
-                pw.Positioned.fill(
-                  child: pw.Image(
-                    portadaImage,
-                    fit: pw.BoxFit.cover,
-                  ),
-                ),
-              pw.Padding(
-                padding: const pw.EdgeInsets.all(12),
-                child: contenidoAnalisis(),
+        pageTheme: pageTheme,
+        build: (ctx) {
+          final widgets = <pw.Widget>[
+            headerText(),
+            pw.SizedBox(height: 10),
+            pw.Table(
+              border: pw.TableBorder.all(color: PdfColor.fromInt(0xFFD9D9D9)),
+              defaultVerticalAlignment: pw.TableCellVerticalAlignment.middle,
+              children: rows,
+            ),
+            pw.SizedBox(height: 12),
+            promsBox(),
+            pw.SizedBox(height: 12),
+            recoBox(),
+            pw.SizedBox(height: 8),
+            legendTextBlock(),
+          ];
+
+          if (esRojo) {
+            widgets
+              ..add(pw.SizedBox(height: 12))
+              ..add(redCaseNotesBlock());
+          }
+
+          if (subsueloImage != null) {
+            widgets
+              ..add(pw.SizedBox(height: 12))
+              ..add(subsueloImageBlock());
+          }
+
+          widgets
+            ..add(pw.SizedBox(height: 10))
+            ..add(
+              pw.Align(
+                alignment: pw.Alignment.centerRight,
+                child: pw.Text('Generado por IDRA', style: const pw.TextStyle(fontSize: 9)),
               ),
-            ],
-          ),
-        ],
+            );
+
+          return widgets;
+        },
       ),
     );
 
